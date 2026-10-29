@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { ChatbotPanel } from "@/components/ChatbotPanel";
+import { ConsolaJson } from "@/components/ConsolaJson";
 import { FormularioTradicional } from "@/components/FormularioTradicional";
 import { ReporteTabs, type TabKey } from "@/components/ReporteTabs";
 import { ResumenReportes } from "@/components/ResumenReportes";
@@ -58,11 +59,17 @@ export function ReportarView({ materias }: { materias: Materia[] }) {
             aria-labelledby="tab-chatbot"
             hidden={tabActiva !== "chatbot"}
           >
-            <ChatbotPanel onIrAFormulario={() => setTabActiva("formulario")} />
+            <ChatbotPanel
+              materias={materias}
+              onIrAFormulario={() => setTabActiva("formulario")}
+            />
           </div>
         </div>
 
-        <ResumenReportes />
+        <div className="space-y-6">
+          <ResumenReportes />
+          <ConsolaJson />
+        </div>
       </div>
     </div>
   );

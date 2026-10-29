@@ -123,3 +123,50 @@ export function guardarNotificacion(notificacion: Notificacion): void {
     console.error("No se pudo guardar la notificación simulada.", error);
   }
 }
+
+/**
+ * Fila que se imprime en la consola JSON y que viajará a la tabla `reportes`
+ * de Supabase. Las cuatro primeras claves son las del contrato; `ticket` se
+ * añade para poder consultar el reporte después.
+ */
+export interface FilaReporte {
+  ci: string;
+  nrc: string;
+  tipo_error: TipoError;
+  motivo: string;
+  ticket: string;
+}
+
+export function aFilaReporte(reporte: Reporte): FilaReporte {
+  return {
+    ci: reporte.ci,
+    nrc: reporte.nrc,
+    tipo_error: reporte.tipo_error,
+    motivo: reporte.motivo,
+    ticket: reporte.ticket,
+  };
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Preparado para Supabase (comentado hasta conectar el backend).
+ *
+ * 1. npm install @supabase/supabase-js
+ * 2. Definir NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY.
+ * 3. Descomentar el bloque y la llamada en `registrarReporte`
+ *    (context/ReportesContext.tsx).
+ *
+ * import { createClient } from "@supabase/supabase-js";
+ *
+ * const supabase = createClient(
+ *   process.env.NEXT_PUBLIC_SUPABASE_URL!,
+ *   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+ * );
+ *
+ * export async function guardarEnSupabase(reporte: Reporte): Promise<void> {
+ *   const { error } = await supabase
+ *     .from("reportes")
+ *     .insert(aFilaReporte(reporte));
+ *
+ *   if (error) throw error;
+ * }
+ * ────────────────────────────────────────────────────────────────────────── */

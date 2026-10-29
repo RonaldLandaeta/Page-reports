@@ -17,17 +17,14 @@ import {
   generarIdReporte,
   generarTicketUnico,
   validarReglas,
+  type FalloRegla,
 } from "@/lib/reportes/reglas";
 import type { NuevoReporteInput, Reporte } from "@/lib/types";
+import { normalizarTicket } from "@/lib/validaciones";
 
 export type ResultadoRegistro =
   | { ok: true; reporte: Reporte }
-  | {
-      ok: false;
-      codigo: "duplicado" | "limite";
-      mensaje: string;
-      ticket?: string;
-    };
+  | FalloRegla;
 
 interface ReportesContextValue {
   /** Reportes agregados, más recientes primero. */
@@ -85,6 +82,8 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
       const siguientes = [reporte, ...actuales];
       guardarReportes(siguientes);
       setReportes(siguientes);
+      // Al conectar Supabase (ver almacen.ts), persistir aquí en remoto:
+      // await guardarEnSupabase(reporte);
       enviarConfirmacion(reporte);
 
       return { ok: true, reporte };
@@ -94,13 +93,13 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
 
   const buscarReporte = useCallback(
     (ticket: string, ci: string): Reporte | null => {
-      const ticketNormalizado = ticket.trim().toUpperCase();
+      const ticketNormalizado = normalizarTicket(ticket);
       const ciNormalizada = ci.trim();
 
       return (
         leerReportes().find(
           (reporte) =>
-            reporte.ticket.toUpperCase() === ticketNormalizado &&
+            normalizarTicket(reporte.ticket) === ticketNormalizado &&
             reporte.ci === ciNormalizada,
         ) ?? null
       );

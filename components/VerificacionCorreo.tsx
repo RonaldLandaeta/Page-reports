@@ -4,13 +4,13 @@ import { useState } from "react";
 
 import { CONFIG } from "@/lib/config";
 import { esCorreoValido } from "@/lib/validaciones";
+import {
+  generarCodigoVerificacion,
+  verificarCodigo,
+  type CodigoVerificacion,
+} from "@/lib/verificacion";
 
 import { CheckIcon, MailIcon } from "./icons";
-
-interface CodigoGenerado {
-  valor: string;
-  expiraEn: number;
-}
 
 interface VerificacionCorreoProps {
   correo: string;
@@ -26,7 +26,7 @@ export function VerificacionCorreo({
   correo,
   onVerifiedChange,
 }: VerificacionCorreoProps) {
-  const [codigo, setCodigo] = useState<CodigoGenerado | null>(null);
+  const [codigo, setCodigo] = useState<CodigoVerificacion | null>(null);
   const [ingresado, setIngresado] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [verificado, setVerificado] = useState(false);
@@ -34,17 +34,17 @@ export function VerificacionCorreo({
   if (!esCorreoValido(correo)) return null;
 
   function generarCodigo() {
-    const valor = String(Math.floor(100000 + Math.random() * 900000));
-    const expiraEn =
-      Date.now() + CONFIG.duracionCodigoVerificacionMinutos * 60 * 1000;
+    const nuevoCodigo = generarCodigoVerificacion();
 
-    setCodigo({ valor, expiraEn });
+    setCodigo(nuevoCodigo);
     setIngresado("");
     setError(null);
     setVerificado(false);
     onVerifiedChange(null);
 
-    console.info(`[demo] Código de verificación para ${correo}: ${valor}`);
+    console.info(
+      `[demo] Código de verificación para ${correo}: ${nuevoCodigo.valor}`,
+    );
   }
 
   function confirmarCodigo() {
@@ -53,12 +53,14 @@ export function VerificacionCorreo({
       return;
     }
 
-    if (Date.now() > codigo.expiraEn) {
+    const resultado = verificarCodigo(codigo, ingresado);
+
+    if (resultado === "expirado") {
       setError("El código expiró. Solicita uno nuevo.");
       return;
     }
 
-    if (ingresado.trim() !== codigo.valor) {
+    if (resultado !== "ok") {
       setError("El código no coincide. Revisa los 6 dígitos e intenta de nuevo.");
       return;
     }
