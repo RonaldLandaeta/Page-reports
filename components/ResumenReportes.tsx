@@ -62,7 +62,7 @@ export function ResumenReportes() {
             Aún no hay reportes
           </p>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            Cuando envíes el formulario, el ticket aparecerá aquí.
+            Cuando envíes un reporte, el ticket aparecerá aquí.
           </p>
         </div>
       ) : (

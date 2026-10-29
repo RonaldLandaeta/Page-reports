@@ -90,7 +90,7 @@ const PREGUNTAS: Record<Paso, string> = {
   nombre: "Gracias. ¿Cuál es tu nombre completo?",
   correo: "¿A qué correo te enviamos la confirmación?",
   verificacion:
-    "Escribe el código de 6 dígitos que enviamos a tu correo. Si no lo tienes, escribe «reenviar».",
+    "Escribe el código de 6 dígitos que enviamos a tu correo. Si no lo tienes, pulsa «Reenviar código».",
   nrc: "¿En qué materia está el problema? Escribe el NRC o el nombre, o elige una de la lista.",
   tipo_error: "¿Qué tipo de problema es?",
   motivo: `Cuéntame el motivo: ¿qué está mal en el horario? (mínimo ${MOTIVO_MINIMO} caracteres)`,
@@ -289,7 +289,7 @@ async function procesar(
       if (!/^\d{6}$/.test(texto.trim())) {
         return rechazo(
           "verificacion",
-          "El código debe tener exactamente 6 dígitos. Escríbelo o escribe «reenviar» para generar otro.",
+          "El código debe tener exactamente 6 dígitos. Escríbelo o pulsa «Reenviar código» para generar otro.",
         );
       }
 
@@ -313,7 +313,7 @@ async function procesar(
       if (resultado !== "ok") {
         return rechazo(
           "verificacion",
-          "El código no coincide. Revisa los 6 dígitos o escribe «reenviar» para generar otro.",
+          "El código no coincide. Revisa los 6 dígitos o pulsa «Reenviar código» para generar otro.",
         );
       }
 
@@ -550,6 +550,19 @@ function Compositor({
               {tipo.label}
             </button>
           ))}
+        </div>
+      )}
+
+      {paso === "verificacion" && (
+        <div className="flex flex-wrap gap-2 px-4 pt-3 sm:px-6">
+          <button
+            type="button"
+            disabled={bloqueado}
+            onClick={() => enviar("reenviar", "Reenviar código")}
+            className={CLASE_CHIP}
+          >
+            Reenviar código
+          </button>
         </div>
       )}
 

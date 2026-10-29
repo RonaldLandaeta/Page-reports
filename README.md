@@ -8,7 +8,7 @@ problemas de horarios académicos y consultar su estado.
 | Ruta         | Descripción                                                     |
 | ------------ | --------------------------------------------------------------- |
 | `/`          | Inicio, accesos a reportar y consultar.                          |
-| `/reportar`  | Formulario tradicional, chatbot (placeholder) y resumen.         |
+| `/reportar`  | Formulario tradicional, chatbot interactivo, resumen y consola JSON. |
 | `/consultar` | Consulta de un reporte mediante ticket + cédula.                 |
 
 ## Funcionalidad
@@ -32,7 +32,9 @@ problemas de horarios académicos y consultar su estado.
 - **Consulta protegida** con ticket + cédula, sin revelar cuál dato falló.
 - **Notificaciones simuladas**: se registran en `localStorage` y en la consola
   del navegador. No se envía correo real todavía.
-- **Chatbot** maquetado como "próximamente", con CTA al formulario.
+- **Chatbot interactivo**: guía paso a paso (cédula, nombre, correo con verificación simulada, materia, tipo de error y motivo), aplica las mismas reglas que el formulario y entrega el ticket en la conversación.
+- **Consola JSON**: panel lateral con los reportes en tiempo real (`ci`, `nrc`, `tipo_error`, `motivo`, `ticket`). Se apaga con `NEXT_PUBLIC_MOSTRAR_CONSOLA=false`.
+- **Supabase preparado**: `guardarEnSupabase(reporte)` está comentada en `lib/reportes/almacen.ts`.
 
 ## Reglas y configuración
 
@@ -139,4 +141,4 @@ El prototipo está separado para facilitar el cambio:
   cliente. Son demostrativos, no seguros para producción.
 - Los reportes solo son visibles en el navegador donde se crearon.
 - El catálogo se lee del sistema de archivos local.
-- El chatbot aún no procesa conversaciones.
+- El código de verificación del chatbot se muestra en la conversación (demo).
