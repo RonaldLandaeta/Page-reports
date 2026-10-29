@@ -86,7 +86,7 @@ const MOTIVO_MINIMO = 15;
 const MOTIVO_MAXIMO = 600;
 
 const PREGUNTAS: Record<Paso, string> = {
-  ci: "¿Cuál es tu cédula? (10 dígitos)",
+  ci: "¿Cuál es tu cédula? (8+ dígitos)",
   nombre: "Gracias. ¿Cuál es tu nombre completo?",
   correo: "¿A qué correo te enviamos la confirmación?",
   verificacion:
@@ -117,7 +117,7 @@ const ETIQUETAS: Record<Paso, string> = {
 };
 
 const MAX_LONGITUD: Record<Paso, number> = {
-  ci: 10,
+  ci: 8,
   nombre: 100,
   correo: 254,
   verificacion: 6,
