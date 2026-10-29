@@ -7,6 +7,8 @@ import { TIPOS_ERROR, esTipoError } from "@/lib/catalogos";
 import { CONFIG } from "@/lib/config";
 import type { Materia, Reporte, TipoError } from "@/lib/types";
 import {
+  CEDULA_MAX_DIGITOS,
+  CEDULA_MIN_DIGITOS,
   esCedulaValida,
   esCorreoValido,
 } from "@/lib/validaciones";
@@ -127,7 +129,7 @@ export function FormularioTradicional({
     const motivo = formulario.motivo.trim();
 
     if (!esCedulaValida(ci)) {
-      nuevosErrores.ci = "Ingresa una cédula válida de 10 dígitos.";
+      nuevosErrores.ci = `Ingresa una cédula válida de ${CEDULA_MIN_DIGITOS} a ${CEDULA_MAX_DIGITOS} dígitos.`;
     }
 
     if (nombre.length < 3) {
@@ -291,13 +293,13 @@ export function FormularioTradicional({
                 type="text"
                 inputMode="numeric"
                 autoComplete="off"
-                maxLength={10}
-                placeholder="Ej. 1712345678"
+                maxLength={CEDULA_MAX_DIGITOS}
+                placeholder="Ej. 12345678"
                 value={formulario.ci}
                 onChange={(event) =>
                   actualizar(
                     "ci",
-                    event.target.value.replace(/\D/g, "").slice(0, 10),
+                    event.target.value.replace(/\D/g, "").slice(0, CEDULA_MAX_DIGITOS),
                   )
                 }
                 required

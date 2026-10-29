@@ -16,6 +16,8 @@ import { useReportes } from "@/context/ReportesContext";
 import { getEstadoReporteLabel, getTipoErrorLabel } from "@/lib/catalogos";
 import type { EstadoReporte, Reporte } from "@/lib/types";
 import {
+  CEDULA_MAX_DIGITOS,
+  CEDULA_MIN_DIGITOS,
   esCedulaValida,
   esTicketValido,
   normalizarTicket,
@@ -80,7 +82,7 @@ export function ConsultarView() {
     }
 
     if (!esCedulaValida(ci)) {
-      nuevosErrores.ci = "Ingresa la cédula de 10 dígitos del reporte.";
+      nuevosErrores.ci = `Ingresa la cédula de ${CEDULA_MIN_DIGITOS} a ${CEDULA_MAX_DIGITOS} dígitos del reporte.`;
     }
 
     setErrores(nuevosErrores);
@@ -197,12 +199,12 @@ export function ConsultarView() {
                 type="text"
                 inputMode="numeric"
                 autoComplete="off"
-                maxLength={10}
-                placeholder="Ej. 1712345678"
+                maxLength={CEDULA_MAX_DIGITOS}
+                placeholder="Ej. 12345678"
                 value={ci}
                 onChange={(event) => {
                   setCi(
-                    event.target.value.replace(/\D/g, "").slice(0, 10),
+                    event.target.value.replace(/\D/g, "").slice(0, CEDULA_MAX_DIGITOS),
                   );
                   setReporte(null);
                   limpiarError("ci");

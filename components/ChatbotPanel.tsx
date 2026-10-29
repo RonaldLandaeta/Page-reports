@@ -15,7 +15,12 @@ import { useReportes, type ResultadoRegistro } from "@/context/ReportesContext";
 import { TIPOS_ERROR, getTipoErrorLabel } from "@/lib/catalogos";
 import { validarDuplicado, validarLimiteDiario } from "@/lib/reportes/reglas";
 import type { Materia, NuevoReporteInput, Reporte, TipoError } from "@/lib/types";
-import { esCedulaValida, esCorreoValido } from "@/lib/validaciones";
+import {
+  CEDULA_MAX_DIGITOS,
+  CEDULA_MIN_DIGITOS,
+  esCedulaValida,
+  esCorreoValido,
+} from "@/lib/validaciones";
 import {
   generarCodigoVerificacion,
   verificarCodigo,
@@ -86,7 +91,7 @@ const MOTIVO_MINIMO = 15;
 const MOTIVO_MAXIMO = 600;
 
 const PREGUNTAS: Record<Paso, string> = {
-  ci: "¿Cuál es tu cédula? (8+ dígitos)",
+  ci: `¿Cuál es tu cédula? (${CEDULA_MIN_DIGITOS} a ${CEDULA_MAX_DIGITOS} dígitos)`,
   nombre: "Gracias. ¿Cuál es tu nombre completo?",
   correo: "¿A qué correo te enviamos la confirmación?",
   verificacion:
@@ -97,7 +102,7 @@ const PREGUNTAS: Record<Paso, string> = {
 };
 
 const PLACEHOLDERS: Record<Paso, string> = {
-  ci: "Ej. 1712345678",
+  ci: "Ej. 12345678",
   nombre: "Ej. Ana Martínez",
   correo: "nombre@institucion.edu.ec",
   verificacion: "Código de 6 dígitos",
@@ -117,7 +122,7 @@ const ETIQUETAS: Record<Paso, string> = {
 };
 
 const MAX_LONGITUD: Record<Paso, number> = {
-  ci: 8,
+  ci: CEDULA_MAX_DIGITOS,
   nombre: 100,
   correo: 254,
   verificacion: 6,
@@ -217,7 +222,7 @@ async function procesar(
       if (!esCedulaValida(texto)) {
         return rechazo(
           "ci",
-          "Esa cédula no es válida: debe tener exactamente 10 dígitos.",
+          `Esa cédula no es válida: debe tener entre ${CEDULA_MIN_DIGITOS} y ${CEDULA_MAX_DIGITOS} dígitos.`,
         );
       }
 
