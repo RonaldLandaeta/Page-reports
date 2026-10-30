@@ -50,13 +50,12 @@ export function esCorreoInstitucional(correo: string): boolean {
   return dominios.some((permitido) => dominio === permitido);
 }
 
-/** Mensaje para mostrar cuando el correo no es institucional. */
-export const mensajeCorreoInstitucional: string =
-  dominiosPermitidos().length > 0
-    ? `Usa tu correo institucional (${dominiosPermitidos()
-        .map((dominio) => `@${dominio}`)
-        .join(", ")}).`
+export function mensajeCorreoInstitucional(): string {
+  const dominios = dominiosPermitidos();
+  return dominios.length > 0
+    ? `Usa tu correo institucional (${dominios.map((d) => `@${d}`).join(", ")}).`
     : "Ingresa un correo electrónico válido.";
+}
 
 /** Oculta la parte local: ana.martinez@uni.edu.ve → a***@uni.edu.ve */
 export function enmascararCorreo(correo: string): string {

@@ -1,14 +1,10 @@
 import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
 
 import { obtenerSupabaseAdmin } from "@/lib/supabase/admin";
 
-export const COOKIE_ADMIN = "admin_session_token";
-
-/** Duración por defecto de la cookie (1 h, igual que el JWT de Supabase). */
-const DURACION_POR_DEFECTO_SEGUNDOS = 60 * 60;
+export const COOKIE_ADMIN = "admin_token";
 
 export interface AdminActual {
   userId: string;
@@ -52,39 +48,8 @@ export async function obtenerAdmin(
   return { userId: data.user.id, email: data.user.email ?? "" };
 }
 
-/**
- * Guarda el JWT en una cookie httpOnly. En Next.js 15 `cookies()` es asíncrono.
- */
+/** Inicio de sesión con la anon key; devuelve el JWT y su duración. */
 export async function iniciarSesionAdmin(
-  token: string,
-  expiraEnSegundos: number = DURACION_POR_DEFECTO_SEGUNDOS,
-): Promise<void> {
-  const almacen = await cookies();
-
-  almacen.set(COOKIE_ADMIN, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
-    maxAge: expiraEnSegundos,
-  });
-}
-
-/** Elimina la cookie de sesión de administración. */
-export async function cerrarSesionAdmin(): Promise<void> {
-  const almacen = await cookies();
-
-  almacen.set(COOKIE_ADMIN, "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
-    maxAge: 0,
-  });
-}
-
-/** Inicio de sesión con la anon key (Supabase Auth); devuelve el JWT y su duración. */
-export async function autenticarAdmin(
   correo: string,
   clave: string,
 ): Promise<{ token: string; expiraEnSegundos: number } | null> {

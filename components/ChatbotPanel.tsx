@@ -248,7 +248,7 @@ async function procesar(
       }
 
       if (!esCorreoInstitucional(correo)) {
-        return rechazo("correo", mensajeCorreoInstitucional);
+        return rechazo("correo", mensajeCorreoInstitucional());
       }
 
       try {

@@ -64,9 +64,9 @@ function firmarToken(correo: string, ci: string): string {
 }
 
 /** Verifica un token emitido tras validar el código. */
-export async function verificarTokenVerificacion(
+export function verificarTokenVerificacion(
   token: string,
-): Promise<{ correo: string; ci: string } | null> {
+): { correo: string; ci: string } | null {
   const [cuerpo, firma] = token.split(".");
   if (!cuerpo || !firma) return null;
 
@@ -118,7 +118,7 @@ export async function solicitarCodigo(
   if (!esCorreoInstitucional(correo)) {
     throw new ErrorVerificacion(
       "validacion",
-      mensajeCorreoInstitucional,
+      mensajeCorreoInstitucional(),
       422,
     );
   }

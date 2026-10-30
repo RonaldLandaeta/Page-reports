@@ -53,7 +53,7 @@ export async function POST(request: Request) {
   if (!esCorreoValido(correo)) {
     campos.correo = "Ingresa un correo electrónico válido.";
   } else if (!esCorreoInstitucional(correo)) {
-    campos.correo = mensajeCorreoInstitucional;
+    campos.correo = mensajeCorreoInstitucional();
   }
 
   if (!/^\d{3,10}$/.test(nrc)) {
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
   let sesion: { correo: string; ci: string } | null = null;
 
   try {
-    sesion = await verificarTokenVerificacion(token);
+    sesion = verificarTokenVerificacion(token);
   } catch (error) {
     console.error("[api/reportes] token no verificable.", error);
     return respuestaError(
