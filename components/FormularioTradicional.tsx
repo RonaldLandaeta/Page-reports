@@ -9,8 +9,13 @@ import type { Materia, Reporte, TipoError } from "@/lib/types";
 import {
   CEDULA_MAX_DIGITOS,
   CEDULA_MIN_DIGITOS,
+  MOTIVO_MAX,
+  MOTIVO_MIN,
+  NOMBRE_MIN,
   esCedulaValida,
+  esCorreoInstitucional,
   esCorreoValido,
+  mensajeCorreoInstitucional,
 } from "@/lib/validaciones";
 
 import { AlertIcon, ClockIcon, SendIcon, ShieldIcon } from "./icons";
@@ -91,6 +96,8 @@ export function FormularioTradicional({
     valor: FormState[K],
   ) {
     setErrorEnvio(null);
+    // El token queda ligado a la cédula: si cambia, hay que verificar de nuevo.
+    if (campo === "ci") setVerificacion(null);
     setFormulario((previo) => {
       const siguiente: FormState = { ...previo };
       siguiente[campo] = valor;
@@ -136,13 +143,15 @@ export function FormularioTradicional({
       nuevosErrores.ci = `Ingresa una cédula válida de ${CEDULA_MIN_DIGITOS} a ${CEDULA_MAX_DIGITOS} dígitos.`;
     }
 
-    if (nombre.length < 3) {
+    if (nombre.length < NOMBRE_MIN) {
       nuevosErrores.nombre = "Ingresa tu nombre completo.";
     }
 
     if (!esCorreoValido(correo)) {
       nuevosErrores.correo = "Ingresa un correo electrónico válido.";
-    } else if (verificacion?.correo !== correo) {
+    } else if (!esCorreoInstitucional(correo)) {
+      nuevosErrores.correo = mensajeCorreoInstitucional();
+    } else if (verificacion?.correo !== correo || verificacion.ci !== ci) {
       nuevosErrores.correo = "Verifica tu correo antes de enviar el reporte.";
     }
 
@@ -154,9 +163,9 @@ export function FormularioTradicional({
       nuevosErrores.tipo_error = "Selecciona el tipo de error.";
     }
 
-    if (motivo.length < 15) {
+    if (motivo.length < MOTIVO_MIN) {
       nuevosErrores.motivo =
-        "Describe el problema con al menos 15 caracteres.";
+        `Describe el problema con al menos ${MOTIVO_MIN} caracteres.`;
     }
 
     return nuevosErrores;
@@ -349,7 +358,7 @@ export function FormularioTradicional({
               name="correo"
               type="email"
               autoComplete="email"
-              placeholder="nombre@institucion.edu.ec"
+              placeholder="nombre@est.ucab.edu.ve"
               value={formulario.correo}
               onChange={(event) => actualizarCorreo(event.target.value)}
               required
@@ -358,11 +367,19 @@ export function FormularioTradicional({
               className={claseControl(Boolean(errores.correo))}
             />
             <ErrorCampo id="correo-error" mensaje={errores.correo} />
+            {esCorreoValido(formulario.correo) && !esCedulaValida(formulario.ci) && (
+              <p className="mt-1.5 text-[11px] text-slate-500">
+                Escribe primero tu cédula para poder verificar el correo.
+              </p>
+            )}
 
-            {esCorreoValido(formulario.correo) && (
+            {esCorreoValido(formulario.correo) &&
+              esCorreoInstitucional(formulario.correo) &&
+              esCedulaValida(formulario.ci) && (
               <VerificacionCorreo
-                key={formulario.correo}
+                key={`${formulario.correo}|${formulario.ci}`}
                 correo={formulario.correo}
+                ci={formulario.ci.trim()}
                 onVerifiedChange={manejarVerificacion}
               />
             )}
@@ -470,14 +487,14 @@ export function FormularioTradicional({
                 Motivo <span className="text-rose-500">*</span>
               </label>
               <span className="text-[11px] tabular-nums text-slate-400">
-                {formulario.motivo.length}/600
+                {formulario.motivo.length}/{MOTIVO_MAX}
               </span>
             </div>
             <textarea
               id="motivo"
               name="motivo"
               rows={5}
-              maxLength={600}
+              maxLength={MOTIVO_MAX}
               placeholder="Describe qué está mal en el horario. Por ejemplo: la clase aparece el martes a las 08:00, pero debería ser el jueves a las 10:00."
               value={formulario.motivo}
               onChange={(event) => actualizar("motivo", event.target.value)}

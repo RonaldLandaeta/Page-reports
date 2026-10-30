@@ -44,7 +44,7 @@ Supabase Postgres  ── RLS activo, sin acceso directo para anon
   En desarrollo, si no hay `RESEND_API_KEY`, el código se muestra en pantalla.
 - **Reglas de negocio en el servidor**:
   - Duplicado con la misma cédula + NRC + tipo de error en 24 horas.
-  - Máximo 5 reportes por cédula por día calendario (`America/Guayaquil`).
+  - Máximo 5 reportes por cédula por día calendario (`America/Caracas`).
 - **Ticket único** `TK-XXXXXX` generado en Postgres.
 - **Consulta protegida** por ticket + cédula, sin revelar cuál dato falló.
 - **Correo de confirmación** con el ticket (best-effort: si falla, el reporte
@@ -61,7 +61,13 @@ En el dashboard de Supabase → **SQL Editor**, ejecuta en este orden:
 
 1. `supabase/migrations/0001_init.sql` — tablas, índices, RLS, triggers y la
    función `registrar_reporte`.
-2. `supabase/seed.sql` — catálogo inicial de materias.
+2. `supabase/migrations/0002_auditoria.sql` — intentos de código atómicos,
+   límite de consultas fallidas y zona horaria de Venezuela.
+3. `supabase/migrations/0003_admin.sql` — tabla `administradores` y función
+   para cambiar estados (panel `/admin`).
+4. `supabase/seed.sql` — catálogo inicial de materias.
+
+(`supabase/setup.sql` ya trae todo junto para pegar de una vez.)
 
 También puedes usar la CLI:
 
@@ -88,6 +94,7 @@ Completa:
 | `GMAIL_USER`                    | Tu correo de Gmail (opcional)                   |
 | `GMAIL_APP_PASSWORD`            | Contraseña de aplicación de Google (opcional)   |
 | `EMAIL_FROM`                    | Remitente; vacío usa el proveedor configurado   |
+| `NEXT_PUBLIC_DOMINIOS_CORREO`   | Dominios permitidos (coma). Por defecto `est.ucab.edu.ve`; `*` = sin restricción |
 
 `SUPABASE_SERVICE_ROLE_KEY` y `VERIFICACION_SECRET` **no** deben llevar el
 prefijo `NEXT_PUBLIC_` ni subirse al repositorio.
@@ -145,6 +152,16 @@ npm run build
 npm run start
 npm run typecheck
 ```
+
+## Panel de administración (`/admin`)
+
+1. Supabase → Authentication → Users → crea un usuario (correo + contraseña).
+2. Autorízalo (SQL Editor):
+   `insert into public.administradores (user_id) select id from auth.users where email = 'tu-admin@dominio';`
+3. Entra en `/admin/login`. La sesión dura lo que el JWT de Supabase (1 h por
+   defecto); después pide login de nuevo. Cookie `httpOnly` + `SameSite=Strict`.
+4. Filtra por estado, busca por ticket/cédula/NRC y cambia el estado con una
+   nota opcional (queda en `reporte_eventos`).
 
 ## API
 
@@ -221,6 +238,7 @@ lib/
   verificacion-servidor.ts       # Códigos, límites y tokens HMAC
   email.ts                       # Resend / Gmail SMTP
   catalogo-materias.ts           # Respaldo CSV si falta configuración
+  secreto.ts                     # Secreto único de firma/hash
   catalogos.ts
   config.ts
   reportes/formato.ts
@@ -238,16 +256,23 @@ data/
 - `service_role` solo en servidor; RLS bloquea el acceso directo.
 - La función `registrar_reporte` es `security definer` y tiene `EXECUTE`
   revocado para `anon`/`authenticated`.
+- El token de verificación queda ligado a una cédula (una cédula puede tener
+  varios tokens; un token sirve para una sola cédula).
 - Tokens HMAC con expiración; códigos guardados como hash, con límite de
   intentos y expiración.
 - Límites de solicitud de códigos por correo (5/hora, 1 cada 60 s) y por IP
   (20/hora).
-- La consola JSON muestra cédula y motivo: deja
-  `NEXT_PUBLIC_MOSTRAR_CONSOLA=false` en producción.
+- Intentos de código contados y canje del código hechos de forma atómica en
+  Postgres.
+- Consulta por ticket + cédula: máximo 10 consultas fallidas por IP cada 15
+  min; el correo se devuelve enmascarado.
+- Solo correos de `NEXT_PUBLIC_DOMINIOS_CORREO` pueden verificarse.
+- Cabeceras de seguridad en `next.config.ts`.
+- La consola JSON muestra cédula y motivo: en producción está apagada salvo
+  que pongas `NEXT_PUBLIC_MOSTRAR_CONSOLA=true`.
 
 ## Pendientes
 
-- Panel `/admin` con Supabase Auth y roles para cambiar estados.
 - Rate limit distribuido (Upstash/Cloudflare) además del control en Postgres.
 - Cron (`pg_cron`) para ejecutar `limpiar_codigos_vencidos()`.
 - Reintentos y cola para el correo de confirmación.

@@ -18,8 +18,12 @@ import type { Materia, NuevoReporteInput, TipoError } from "@/lib/types";
 import {
   CEDULA_MAX_DIGITOS,
   CEDULA_MIN_DIGITOS,
+  MOTIVO_MAX,
+  MOTIVO_MIN,
   esCedulaValida,
+  esCorreoInstitucional,
   esCorreoValido,
+  mensajeCorreoInstitucional,
 } from "@/lib/validaciones";
 
 import { ArrowRightIcon, ChatIcon, SendIcon } from "./icons";
@@ -81,8 +85,8 @@ interface ContextoProceso {
 }
 
 const RETRASO_BOT_MS = 450;
-const MOTIVO_MINIMO = 15;
-const MOTIVO_MAXIMO = 600;
+const MOTIVO_MINIMO = MOTIVO_MIN;
+const MOTIVO_MAXIMO = MOTIVO_MAX;
 
 const PREGUNTAS: Record<Paso, string> = {
   ci: `¿Cuál es tu cédula? (${CEDULA_MIN_DIGITOS} a ${CEDULA_MAX_DIGITOS} dígitos)`,
@@ -98,7 +102,7 @@ const PREGUNTAS: Record<Paso, string> = {
 const PLACEHOLDERS: Record<Paso, string> = {
   ci: "Ej. 12345678",
   nombre: "Ej. Ana Martínez",
-  correo: "nombre@institucion.edu.ec",
+  correo: "nombre@est.ucab.edu.ve",
   verificacion: "Código de 6 dígitos",
   nrc: "NRC o nombre de la materia",
   tipo_error: "Elige una opción o escríbela",
@@ -243,6 +247,10 @@ async function procesar(
         );
       }
 
+      if (!esCorreoInstitucional(correo)) {
+        return rechazo("correo", mensajeCorreoInstitucional());
+      }
+
       try {
         const resultado = await postJson<{ codigoDemo?: string }>(
           "/api/verificacion/solicitar",
@@ -323,7 +331,7 @@ async function procesar(
       try {
         const { token } = await postJson<{ token: string }>(
           "/api/verificacion/validar",
-          { correo, codigo: texto.trim() },
+          { correo, codigo: texto.trim(), ci: datos.ci },
         );
 
         datos.verificacionToken = token;
