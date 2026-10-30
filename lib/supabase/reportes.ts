@@ -1,6 +1,7 @@
 import "server-only";
 
 import { esEstadoReporte, esTipoError } from "@/lib/catalogos";
+import { buscarMateriaPorCodigo } from "@/lib/materias";
 import type { Reporte, ReporteInput } from "@/lib/types";
 
 import { obtenerSupabaseAdmin } from "./admin";
@@ -35,14 +36,6 @@ export type ResultadoCreacion =
       ticket?: string;
     };
 
-interface RespuestaRpc {
-  ok: boolean;
-  codigo?: string;
-  mensaje?: string;
-  ticket?: string;
-  reporte?: FilaReporteDb;
-}
-
 const CAMPOS_PUBLICOS =
   "id, ticket, ci, nombre, correo, nrc, tipo_error, motivo, materia_nombre, materia_aula, estado, creado_en";
 
@@ -67,48 +60,62 @@ export function mapearReporte(fila: FilaReporteDb): Reporte {
 }
 
 /**
- * Reglas + ticket + persistencia viven en la función SQL `registrar_reporte`.
- * Así dos peticiones simultáneas de la misma cédula no pueden saltarse el
- * duplicado ni el límite diario.
+ * Inserta el reporte directamente en Supabase.
+ * El nombre de la materia se obtiene en memoria desde el catálogo local.
  */
 export async function crearReporteEnDb(
   input: ReporteInput,
 ): Promise<ResultadoCreacion> {
-  const { data, error } = await obtenerSupabaseAdmin().rpc("registrar_reporte", {
-    p_ci: input.ci.trim(),
-    p_nombre: input.nombre.trim(),
-    p_correo: input.correo.trim().toLowerCase(),
-    p_nrc: input.nrc,
-    p_tipo_error: input.tipo_error,
-    p_motivo: input.motivo.trim(),
-  });
+  try {
+    const supabase = obtenerSupabaseAdmin();
 
-  if (error) {
-    console.error("[reportes] registrar_reporte falló.", error);
+    // 1. Resolver el nombre de la materia localmente desde tu malla
+    const materiaLocal = buscarMateriaPorCodigo(input.nrc);
+    const materiaNombre = materiaLocal
+      ? materiaLocal.materia
+      : "Materia no encontrada";
+
+    // 2. Generar ticket único de reporte
+    const ticket = `TICK-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    // 3. Insertar el reporte en Supabase
+    const { data, error } = await supabase
+      .from("reportes")
+      .insert([
+        {
+          ticket,
+          ci: input.ci.trim(),
+          nombre: input.nombre.trim(),
+          correo: input.correo.trim().toLowerCase(),
+          nrc: input.nrc,
+          materia_nombre: materiaNombre,
+          materia_aula: "Por asignar",
+          tipo_error: input.tipo_error,
+          motivo: input.motivo.trim(),
+          estado: "pendiente",
+        },
+      ])
+      .select(CAMPOS_PUBLICOS)
+      .single();
+
+    if (error) {
+      console.error("[reportes] error al insertar reporte en Supabase:", error);
+      return {
+        ok: false,
+        codigo: "interno",
+        mensaje: "No pudimos registrar el reporte. Intenta nuevamente.",
+      };
+    }
+
+    return { ok: true, reporte: mapearReporte(data as FilaReporteDb) };
+  } catch (err) {
+    console.error("[reportes] fallo inesperado:", err);
     return {
       ok: false,
       codigo: "interno",
-      mensaje: "No pudimos registrar el reporte. Intenta nuevamente.",
+      mensaje: "Ocurrió un error inesperado al procesar la solicitud.",
     };
   }
-
-  const respuesta = data as RespuestaRpc | null;
-
-  if (!respuesta?.ok || !respuesta.reporte) {
-    const codigo = respuesta?.codigo;
-
-    return {
-      ok: false,
-      codigo:
-        codigo === "duplicado" || codigo === "limite" || codigo === "materia"
-          ? codigo
-          : "interno",
-      mensaje: respuesta?.mensaje ?? "No pudimos registrar el reporte.",
-      ticket: respuesta?.ticket,
-    };
-  }
-
-  return { ok: true, reporte: mapearReporte(respuesta.reporte) };
 }
 
 /** Consulta protegida: el ticket y la cédula deben coincidir. */

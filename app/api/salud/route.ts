@@ -3,8 +3,10 @@ import { NextResponse } from "next/server";
 import {
   claveAnonima,
   claveServiceRole,
+  fuenteUrlSupabase,
   haySupabaseConfigurado,
   obtenerSupabaseAdmin,
+  proyectoSupabase,
   urlSupabase,
 } from "@/lib/supabase/admin";
 
@@ -33,6 +35,33 @@ function comprobar(comprobacion: () => unknown): boolean {
   }
 }
 
+/** Nombre de la columna que PostgREST dice que falta, si aplica. */
+function columnaFaltante(mensaje: string): string | null {
+  const coincidencia = mensaje.match(/column "?([\w.]+)"? does not exist/i);
+  return coincidencia?.[1] ?? null;
+}
+
+/** Traduce el error de PostgREST a la migración que hay que ejecutar. */
+function pistaCatalogo(codigo: string, mensaje: string): string {
+  if (codigo === "42703" || codigo === "PGRST204") {
+    return "Faltan columnas en public.materias. Ejecuta supabase/migrations/0005_reparar_materias.sql (o el setup.sql completo) en el proyecto que usa Vercel.";
+  }
+
+  if (codigo === "42501" || codigo === "PGRST301") {
+    return "La Data API no tiene permisos sobre public.materias. Ejecuta supabase/migrations/0004_permisos.sql.";
+  }
+
+  if (codigo === "42P01" || codigo === "PGRST205") {
+    return "No existe public.materias en este proyecto. Ejecuta supabase/setup.sql.";
+  }
+
+  if (/schema cache/i.test(mensaje)) {
+    return "PostgREST conserva la caché vieja. Ejecuta `notify pgrst, 'reload schema';` en el SQL Editor.";
+  }
+
+  return "Revisa los logs de Vercel y ejecuta supabase/setup.sql en el proyecto configurado.";
+}
+
 async function comprobarTablas(
   supabase: ReturnType<typeof obtenerSupabaseAdmin>,
 ): Promise<Record<TablaRequerida, boolean>> {
@@ -57,8 +86,9 @@ async function comprobarTablas(
 }
 
 /**
- * Diagnóstico de despliegue: comprueba variables y que la tabla `materias`
- * responda. No devuelve claves ni detalles internos de los errores.
+ * Diagnóstico de despliegue: comprueba variables, tablas y la consulta real del
+ * catálogo. No devuelve claves; sí el host del proyecto y, si falla, el código
+ * de error y la columna que falta (información de esquema, no secreta).
  */
 export async function GET() {
   const estado = {
@@ -90,12 +120,16 @@ export async function GET() {
     const supabase = obtenerSupabaseAdmin();
     const tablas = await comprobarTablas(supabase);
     const faltantes = TABLAS.filter((tabla) => !tablas[tabla]);
+    const proyecto = proyectoSupabase();
+    const fuenteUrl = fuenteUrlSupabase();
 
     if (faltantes.length > 0) {
       return NextResponse.json(
         {
           ok: false,
           supabase: estado,
+          proyecto,
+          fuenteUrl,
           tablas,
           faltantes,
           materias: null,
@@ -112,10 +146,48 @@ export async function GET() {
 
     if (error) throw error;
 
+    // Misma consulta que `listarMaterias()`: si aquí falla, /api/materias
+    // devolverá 503 aunque la tabla exista.
+    const { error: errorCatalogo } = await supabase
+      .from("materias")
+      .select("nrc, nombre, docente, horario, aula")
+      .eq("activo", true)
+      .limit(1);
+
+    if (errorCatalogo) {
+      console.error(
+        "[api/salud] la consulta del catálogo falló:",
+        errorCatalogo.message,
+      );
+
+      return NextResponse.json(
+        {
+          ok: false,
+          supabase: estado,
+          proyecto,
+          fuenteUrl,
+          tablas,
+          faltantes: [],
+          materias: count ?? 0,
+          codigo: errorCatalogo.code ?? null,
+          columna: columnaFaltante(errorCatalogo.message),
+          mensaje:
+            "public.materias existe, pero la consulta que usa la app falla. Por eso /api/materias responde 503.",
+          pista: pistaCatalogo(
+            errorCatalogo.code ?? "",
+            errorCatalogo.message,
+          ),
+        },
+        { status: 503, headers: SIN_CACHE },
+      );
+    }
+
     return NextResponse.json(
       {
         ok: true,
         supabase: estado,
+        proyecto,
+        fuenteUrl,
         tablas,
         faltantes: [],
         materias: count ?? 0,
@@ -133,6 +205,8 @@ export async function GET() {
       {
         ok: false,
         supabase: estado,
+        proyecto: proyectoSupabase(),
+        fuenteUrl: fuenteUrlSupabase(),
         tablas: null,
         faltantes: null,
         materias: null,

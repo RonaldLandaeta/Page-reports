@@ -68,7 +68,10 @@ En el dashboard de Supabase → **SQL Editor**, ejecuta en este orden:
    para cambiar estados (panel `/admin`).
 4. `supabase/migrations/0004_permisos.sql` — permisos explícitos de la Data API
    para `service_role`.
-5. `supabase/seed.sql` — catálogo inicial de materias.
+5. `supabase/migrations/0005_reparar_materias.sql` — repara una tabla `materias`
+   con esquema antiguo (columna `materia` en vez de `nombre`, columnas
+   faltantes o `nrc` sin índice único).
+6. `supabase/seed.sql` — catálogo inicial de materias.
 
 (`supabase/setup.sql` ya trae todo junto para pegar de una vez.)
 
@@ -83,6 +86,10 @@ supabase db push
 > `supabase/seed.sql`. Después de `db push`, pega el contenido de `seed.sql` en
 > el SQL Editor (o usa `supabase db reset` en local, que sí corre el seed).
 > Si la tabla `materias` queda vacía, `/reportar` no podrá seleccionar materias.
+>
+> `setup.sql` incluye `0005` justo después de crear `materias`, así que también
+> arregla proyectos donde la tabla ya existía con el esquema viejo. No borres la
+> tabla ni los reportes: la migración solo renombra/añade columnas.
 
 El archivo `supabase/config.toml` ya está incluido para el entorno local
 (`supabase start`). Ajusta `db.major_version` si tu proyecto remoto usa otra
@@ -218,11 +225,28 @@ Códigos: `validacion`, `verificacion`, `duplicado`, `limite`, `materia`,
 - que `VERIFICACION_SECRET` tenga al menos 32 caracteres;
 - que existan las tablas `materias`, `reportes`, `reporte_eventos`,
   `codigos_verificacion`, `consulta_intentos` y `administradores`;
-- que la tabla `materias` responda y cuántas materias activas tiene.
+- que la tabla `materias` responda y cuántas materias activas tiene;
+- que la consulta exacta de `/api/materias`
+  (`nrc, nombre, docente, horario, aula`) funcione.
+
+Además devuelve:
+
+- `proyecto`: host del Supabase usado (p. ej. `abcd.supabase.co`). No es un
+  secreto; sirve para comparar local y producción.
+- `fuenteUrl`: `SUPABASE_URL` o `NEXT_PUBLIC_SUPABASE_URL`, según cuál se usó.
+  Recuerda que `SUPABASE_URL` tiene prioridad en el servidor.
+- Si la consulta del catálogo falla: `codigo`, `columna` y `pista` con la
+  migración que hay que ejecutar.
 
 Si `ok` es `false`, el campo `mensaje` indica qué revisar. Los fallos de
 `/api/materias` también aparecen en los logs de Vercel con el prefijo
 `[materias]`.
+
+> Si `/api/salud` dice `ok: true` con `materias: 0` pero `/api/materias` responde
+> 503, la tabla existe pero **no tiene las columnas que espera la app**: ejecuta
+> `supabase/setup.sql` (incluye `0005`) en el proyecto que muestra `proyecto`.
+> Si el `proyecto` no es el mismo donde corriste el seed, revisa las variables
+> de Vercel (sobre todo un `SUPABASE_URL` viejo).
 
 ### Comprobaciones en Supabase
 
@@ -239,6 +263,12 @@ order by table_name;
 -- ¿Hay catálogo activo?
 select count(*) as total, count(*) filter (where activo) as activas
 from public.materias;
+
+-- ¿La tabla materias tiene las columnas que usa la app?
+select column_name
+from information_schema.columns
+where table_schema = 'public' and table_name = 'materias'
+order by ordinal_position;
 
 -- ¿Existen las funciones que usa la app?
 select proname
@@ -329,6 +359,7 @@ supabase/
   migrations/0002_auditoria.sql
   migrations/0003_admin.sql
   migrations/0004_permisos.sql
+  migrations/0005_reparar_materias.sql
   seed.sql
   setup.sql
 data/

@@ -5,7 +5,8 @@ import { useState, type FormEvent } from "react";
 import { useReportes } from "@/context/ReportesContext";
 import { TIPOS_ERROR, esTipoError } from "@/lib/catalogos";
 import { CONFIG } from "@/lib/config";
-import type { Materia, Reporte, TipoError } from "@/lib/types";
+import { MALLA_OFICIAL, type MateriaOficial } from "@/lib/materias";
+import type { Reporte, TipoError } from "@/lib/types";
 import {
   CEDULA_MAX_DIGITOS,
   CEDULA_MIN_DIGITOS,
@@ -72,13 +73,7 @@ function ErrorCampo({ id, mensaje }: { id: string; mensaje?: string }) {
   );
 }
 
-export function FormularioTradicional({
-  materias,
-  errorCatalogo,
-}: {
-  materias: Materia[];
-  errorCatalogo: string | null;
-}) {
+export function FormularioTradicional() {
   const { registrarReporte } = useReportes();
 
   const [formulario, setFormulario] = useState<FormState>(FORMULARIO_INICIAL);
@@ -89,8 +84,8 @@ export function FormularioTradicional({
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
-  const materiaSeleccionada = materias.find(
-    (materia) => materia.nrc === formulario.nrc,
+  const materiaSeleccionada = MALLA_OFICIAL.find(
+    (materia) => materia.codigo === formulario.nrc || materia.nroCurso === formulario.nrc,
   );
 
   function actualizar<K extends CampoFormulario>(
@@ -98,7 +93,6 @@ export function FormularioTradicional({
     valor: FormState[K],
   ) {
     setErrorEnvio(null);
-    // El token queda ligado a la cédula: si cambia, hay que verificar de nuevo.
     if (campo === "ci") setVerificacion(null);
     setFormulario((previo) => {
       const siguiente: FormState = { ...previo };
@@ -157,8 +151,8 @@ export function FormularioTradicional({
       nuevosErrores.correo = "Verifica tu correo antes de enviar el reporte.";
     }
 
-    if (!materias.some((materia) => materia.nrc === formulario.nrc)) {
-      nuevosErrores.nrc = "Selecciona la materia del horario afectado.";
+    if (!MALLA_OFICIAL.some((materia) => materia.codigo === formulario.nrc || materia.nroCurso === formulario.nrc)) {
+      nuevosErrores.nrc = "Selecciona una materia válida de la malla.";
     }
 
     if (!esTipoError(formulario.tipo_error)) {
@@ -234,8 +228,6 @@ export function FormularioTradicional({
     }
   }
 
-  const catalogoVacio = materias.length === 0;
-
   return (
     <>
       <section
@@ -249,7 +241,7 @@ export function FormularioTradicional({
                 id="titulo-formulario"
                 className="text-lg font-semibold tracking-tight text-slate-900"
               >
-                Formulario tradicional
+                Formulario de reporte de horarios
               </h2>
               <p className="mt-1 text-sm leading-6 text-slate-500">
                 Completa los datos para que podamos identificar y corregir el
@@ -267,19 +259,6 @@ export function FormularioTradicional({
           onSubmit={handleSubmit}
           className="space-y-5 px-5 py-6 sm:px-6"
         >
-          {catalogoVacio && (
-            <div
-              role="alert"
-              className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
-            >
-              <AlertIcon className="mt-0.5 size-4 shrink-0" />
-              <p>
-                {errorCatalogo ??
-                  "El catálogo de materias está vacío. Avisa al administrador para que cargue las materias antes de reportar."}
-              </p>
-            </div>
-          )}
-
           {errorEnvio && (
             <div
               role="alert"
@@ -390,7 +369,7 @@ export function FormularioTradicional({
                 htmlFor="nrc"
                 className="mb-1.5 block text-sm font-medium text-slate-700"
               >
-                Materia (NRC) <span className="text-rose-500">*</span>
+                Materia <span className="text-rose-500">*</span>
               </label>
               <select
                 id="nrc"
@@ -398,19 +377,14 @@ export function FormularioTradicional({
                 value={formulario.nrc}
                 onChange={(event) => actualizar("nrc", event.target.value)}
                 required
-                disabled={catalogoVacio}
                 aria-invalid={Boolean(errores.nrc)}
                 aria-describedby={errores.nrc ? "nrc-error" : undefined}
                 className={claseControl(Boolean(errores.nrc))}
               >
-                <option value="">
-                  {catalogoVacio
-                    ? "Catálogo no disponible"
-                    : "Selecciona una materia"}
-                </option>
-                {materias.map((materia) => (
-                  <option key={materia.nrc} value={materia.nrc}>
-                    NRC {materia.nrc} — {materia.nombre}
+                <option value="">Selecciona una materia</option>
+                {MALLA_OFICIAL.map((materia) => (
+                  <option key={materia.codigo} value={materia.codigo}>
+                    [{materia.codigo}] {materia.materia}
                   </option>
                 ))}
               </select>
@@ -461,17 +435,14 @@ export function FormularioTradicional({
               <p className="flex items-center gap-2">
                 <ClockIcon className="size-4 shrink-0 text-indigo-500" />
                 <span>
-                  <span className="font-semibold">Horario actual:</span>{" "}
-                  {materiaSeleccionada.horario}
-                  {materiaSeleccionada.aula
-                    ? ` · Aula ${materiaSeleccionada.aula}`
-                    : ""}
+                  <span className="font-semibold">Horario por defecto:</span>{" "}
+                  {materiaSeleccionada.horarioDefecto}
                 </span>
               </p>
-              {materiaSeleccionada.docente && (
+              {materiaSeleccionada.prelaciones.length > 0 && (
                 <p className="pl-6 sm:pl-0">
-                  <span className="font-semibold">Docente:</span>{" "}
-                  {materiaSeleccionada.docente}
+                  <span className="font-semibold">Prelaciones:</span>{" "}
+                  {materiaSeleccionada.prelaciones.join(", ")}
                 </p>
               )}
             </div>
@@ -528,7 +499,7 @@ export function FormularioTradicional({
               </button>
               <button
                 type="submit"
-                disabled={enviando || catalogoVacio}
+                disabled={enviando}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-indigo-400"
               >
                 {enviando ? (

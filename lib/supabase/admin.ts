@@ -50,6 +50,30 @@ export function urlSupabase(): string {
   return url.origin;
 }
 
+/**
+ * Variable de la que salió la URL. En Vercel es común tener un `SUPABASE_URL`
+ * antiguo que tiene prioridad sobre la variable pública; saberlo evita buscar
+ * el problema en el proyecto equivocado.
+ */
+export function fuenteUrlSupabase(): "SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_URL" | null {
+  if (variable("SUPABASE_URL")) return "SUPABASE_URL";
+  if (variable("NEXT_PUBLIC_SUPABASE_URL")) return "NEXT_PUBLIC_SUPABASE_URL";
+  return null;
+}
+
+/**
+ * Referencia del proyecto (`<ref>.supabase.co`). No es un secreto: aparece en
+ * todas las peticiones del cliente. Sirve para comparar el proyecto local con
+ * el de producción.
+ */
+export function proyectoSupabase(): string {
+  try {
+    return new URL(urlSupabase()).hostname;
+  } catch {
+    return "";
+  }
+}
+
 export function claveAnonima(): string {
   const valor = variable("NEXT_PUBLIC_SUPABASE_ANON_KEY");
 
