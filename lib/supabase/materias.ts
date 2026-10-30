@@ -37,6 +37,12 @@ export async function listarMaterias(): Promise<Materia[]> {
       return [];
     }
 
+    if (!data || data.length === 0) {
+      console.warn(
+        "[materias] La tabla public.materias no devolvió filas activas. ¿Se ejecutó supabase/seed.sql en este proyecto de Supabase?",
+      );
+    }
+
     return (data ?? []).map((fila) => mapearMateria(fila as FilaMateria));
   } catch (err) {
     console.error("[materias] Error al inicializar cliente Supabase.", err);

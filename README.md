@@ -38,7 +38,8 @@ Supabase Postgres  ── RLS activo, sin acceso directo para anon
 - **Formulario tradicional** con cédula, nombre, correo, materia (`nrc`), tipo
   de error y motivo.
 - **Catálogo de materias en Supabase** (tabla `materias`), importado desde
-  `data/materias.csv` con `supabase/seed.sql`.
+  `data/materias.csv` con `supabase/seed.sql` (el CSV es solo la fuente del seed;
+  la app no lo lee en tiempo de ejecución).
 - **Verificación de correo real** con código de 6 dígitos enviado por Resend o
   Gmail SMTP.
   En desarrollo, si no hay `RESEND_API_KEY`, el código se muestra en pantalla.
@@ -233,11 +234,10 @@ lib/
   api-cliente.ts                 # fetch tipado para el navegador
   supabase/
     admin.ts                     # Cliente service_role (solo servidor)
-    materias.ts
+    materias.ts                  # Catálogo desde la tabla materias
     reportes.ts
   verificacion-servidor.ts       # Códigos, límites y tokens HMAC
   email.ts                       # Resend / Gmail SMTP
-  catalogo-materias.ts           # Respaldo CSV si falta configuración
   secreto.ts                     # Secreto único de firma/hash
   catalogos.ts
   config.ts

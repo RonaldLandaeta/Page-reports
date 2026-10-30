@@ -12,9 +12,6 @@ const cabecerasSeguridad = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  outputFileTracingIncludes: {
-    "/*": ["./data/**/*"],
-  },
   async headers() {
     return [{ source: "/(.*)", headers: cabecerasSeguridad }];
   },

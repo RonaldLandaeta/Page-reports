@@ -272,11 +272,8 @@ export function FormularioTradicional({
             >
               <AlertIcon className="mt-0.5 size-4 shrink-0" />
               <p>
-                No se pudo cargar el catálogo de materias. Revisa{" "}
-                <code className="rounded bg-amber-100 px-1 py-0.5 text-xs">
-                  data/materias.csv
-                </code>{" "}
-                e intenta de nuevo.
+                No se pudo cargar el catálogo de materias. Intenta de nuevo en
+                unos minutos; si el problema continúa, avisa al administrador.
               </p>
             </div>
           )}
