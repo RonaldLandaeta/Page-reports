@@ -30,26 +30,20 @@ export interface ReporteInput {
   motivo: string;
 }
 
-/** Datos normalizados que recibe el estado global antes de registrar. */
+/**
+ * Datos que envía el cliente a la API. El servidor resuelve la materia desde
+ * el catálogo y exige el token emitido tras verificar el correo.
+ */
 export interface NuevoReporteInput extends ReporteInput {
-  materiaNombre: string;
-  materiaAula: string;
+  verificacionToken: string;
 }
 
 /** Reporte ya registrado, con los datos derivados por el sistema. */
-export interface Reporte extends NuevoReporteInput {
+export interface Reporte extends ReporteInput {
   id: string;
   ticket: string;
   creadoEn: string;
   estado: EstadoReporte;
-}
-
-/** Registro local de un correo simulado. Se reemplazará por el proveedor real. */
-export interface Notificacion {
-  id: string;
-  ticket: string;
-  correo: string;
-  asunto: string;
-  tipo: "confirmacion" | "cambio-estado";
-  enviadoEn: string;
+  materiaNombre: string;
+  materiaAula: string;
 }

@@ -1,76 +1,108 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { ErrorApi, postJson } from "@/lib/api-cliente";
 import { CONFIG } from "@/lib/config";
 import { esCorreoValido } from "@/lib/validaciones";
-import {
-  generarCodigoVerificacion,
-  verificarCodigo,
-  type CodigoVerificacion,
-} from "@/lib/verificacion";
 
 import { CheckIcon, MailIcon } from "./icons";
 
-interface VerificacionCorreoProps {
+export interface VerificacionAprobada {
   correo: string;
-  onVerifiedChange: (correo: string | null) => void;
+  token: string;
 }
 
+interface VerificacionCorreoProps {
+  correo: string;
+  onVerifiedChange: (verificacion: VerificacionAprobada | null) => void;
+}
+
+type Fase = "inicial" | "enviando" | "enviado" | "validando" | "verificado";
+
 /**
- * Verificación simulada para el prototipo. El código se genera en el cliente
- * y se muestra en pantalla; al integrar backend debe enviarse por correo y
- * validarse en el servidor.
+ * Verificación real: el código se genera y valida en el servidor, se envía por
+ * Resend y el cliente solo recibe un token firmado de corta duración.
  */
 export function VerificacionCorreo({
   correo,
   onVerifiedChange,
 }: VerificacionCorreoProps) {
-  const [codigo, setCodigo] = useState<CodigoVerificacion | null>(null);
-  const [ingresado, setIngresado] = useState("");
+  const normalizado = correo.trim().toLowerCase();
+  const [fase, setFase] = useState<Fase>("inicial");
+  const [codigo, setCodigo] = useState("");
+  const [codigoDemo, setCodigoDemo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [verificado, setVerificado] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+
+    const intervalo = window.setInterval(() => {
+      setCooldown((valor) => Math.max(0, valor - 1));
+    }, 1000);
+
+    return () => window.clearInterval(intervalo);
+  }, [cooldown]);
 
   if (!esCorreoValido(correo)) return null;
 
-  function generarCodigo() {
-    const nuevoCodigo = generarCodigoVerificacion();
+  async function solicitar() {
+    if (cooldown > 0 || fase === "enviando" || fase === "validando") return;
 
-    setCodigo(nuevoCodigo);
-    setIngresado("");
+    setFase("enviando");
     setError(null);
-    setVerificado(false);
-    onVerifiedChange(null);
 
-    console.info(
-      `[demo] Código de verificación para ${correo}: ${nuevoCodigo.valor}`,
-    );
+    try {
+      const resultado = await postJson<{
+        expiraEn: string;
+        codigoDemo?: string;
+      }>("/api/verificacion/solicitar", { correo: normalizado });
+
+      setCodigo("");
+      setCodigoDemo(resultado.codigoDemo ?? null);
+      setFase("enviado");
+      setCooldown(CONFIG.segundosEntreSolicitudes);
+      onVerifiedChange(null);
+    } catch (fallo) {
+      setFase("inicial");
+      setError(
+        fallo instanceof ErrorApi
+          ? fallo.message
+          : "No pudimos enviar el código. Intenta de nuevo.",
+      );
+    }
   }
 
-  function confirmarCodigo() {
-    if (!codigo) {
-      setError("Solicita un código antes de confirmar.");
+  async function confirmar() {
+    if (!/^\d{6}$/.test(codigo)) {
+      setError("Escribe los 6 dígitos del código.");
       return;
     }
 
-    const resultado = verificarCodigo(codigo, ingresado);
-
-    if (resultado === "expirado") {
-      setError("El código expiró. Solicita uno nuevo.");
-      return;
-    }
-
-    if (resultado !== "ok") {
-      setError("El código no coincide. Revisa los 6 dígitos e intenta de nuevo.");
-      return;
-    }
-
+    setFase("validando");
     setError(null);
-    setVerificado(true);
-    onVerifiedChange(correo.trim().toLowerCase());
+
+    try {
+      const resultado = await postJson<{ token: string }>(
+        "/api/verificacion/validar",
+        { correo: normalizado, codigo },
+      );
+
+      setFase("verificado");
+      setCodigoDemo(null);
+      onVerifiedChange({ correo: normalizado, token: resultado.token });
+    } catch (fallo) {
+      setFase("enviado");
+      setError(
+        fallo instanceof ErrorApi
+          ? fallo.message
+          : "No pudimos validar el código. Intenta de nuevo.",
+      );
+    }
   }
 
-  if (verificado) {
+  if (fase === "verificado") {
     return (
       <div
         aria-live="polite"
@@ -81,44 +113,71 @@ export function VerificacionCorreo({
           <p className="text-xs font-semibold text-emerald-800">
             Correo verificado
           </p>
-          <p className="mt-0.5 text-[11px] text-emerald-700">{correo}</p>
+          <p className="mt-0.5 text-[11px] text-emerald-700">{normalizado}</p>
         </div>
       </div>
     );
   }
 
-  if (!codigo) {
+  if (fase === "inicial" || fase === "enviando") {
     return (
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={generarCodigo}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-        >
-          <MailIcon className="size-3.5" />
-          Verificar correo
-        </button>
-        <p className="text-[11px] text-slate-500">
-          Enviaremos un código de 6 dígitos (simulado).
-        </p>
+      <div className="mt-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={solicitar}
+            disabled={fase === "enviando"}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {fase === "enviando" ? (
+              <>
+                <span className="size-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                Enviando...
+              </>
+            ) : (
+              <>
+                <MailIcon className="size-3.5" />
+                Verificar correo
+              </>
+            )}
+          </button>
+          <p className="text-[11px] text-slate-500">
+            Enviaremos un código de 6 dígitos.
+          </p>
+        </div>
+
+        {error && (
+          <p role="alert" className="mt-2 text-[11px] font-medium text-rose-600">
+            {error}
+          </p>
+        )}
       </div>
     );
   }
 
   return (
     <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
-        <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-          <MailIcon className="size-3.5" />
-          Simulación de envío
-        </p>
-        <p className="mt-1 text-xs leading-5 text-amber-800">
-          No se envió un correo real. En este prototipo usa el código:
-        </p>
-        <p className="mt-1 font-mono text-lg font-bold tracking-[0.3em] text-amber-900">
-          {codigo.valor}
-        </p>
-      </div>
+      <p className="flex items-start gap-1.5 text-xs leading-5 text-slate-600">
+        <MailIcon className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
+        <span>
+          Enviamos un código de 6 dígitos a{" "}
+          <span className="font-semibold text-slate-800">{normalizado}</span>.
+        </span>
+      </p>
+
+      {codigoDemo && (
+        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+            Modo desarrollo
+          </p>
+          <p className="mt-1 text-xs leading-5 text-amber-800">
+            No se envió un correo real. Usa este código:
+          </p>
+          <p className="mt-1 font-mono text-lg font-bold tracking-[0.3em] text-amber-900">
+            {codigoDemo}
+          </p>
+        </div>
+      )}
 
       <div className="mt-2.5 flex gap-2">
         <input
@@ -130,25 +189,34 @@ export function VerificacionCorreo({
           aria-label="Código de verificación"
           aria-invalid={Boolean(error)}
           aria-describedby={error ? "codigo-verificacion-error" : undefined}
-          value={ingresado}
+          value={codigo}
           onChange={(event) => {
-            setIngresado(event.target.value.replace(/\D/g, "").slice(0, 6));
+            setCodigo(event.target.value.replace(/\D/g, "").slice(0, 6));
             if (error) setError(null);
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
-              confirmarCodigo();
+              void confirmar();
             }
           }}
-          className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 tracking-widest placeholder:tracking-normal placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10"
+          disabled={fase === "validando"}
+          className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm tracking-widest text-slate-900 placeholder:tracking-normal placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 disabled:bg-slate-50"
         />
         <button
           type="button"
-          onClick={confirmarCodigo}
-          className="shrink-0 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25"
+          onClick={confirmar}
+          disabled={fase === "validando"}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 disabled:cursor-not-allowed disabled:bg-indigo-400"
         >
-          Confirmar
+          {fase === "validando" ? (
+            <>
+              <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+              Validando...
+            </>
+          ) : (
+            "Confirmar"
+          )}
         </button>
       </div>
 
@@ -168,10 +236,11 @@ export function VerificacionCorreo({
         </p>
         <button
           type="button"
-          onClick={generarCodigo}
-          className="text-[11px] font-semibold text-indigo-600 underline-offset-2 hover:underline"
+          onClick={solicitar}
+          disabled={cooldown > 0 || fase === "validando"}
+          className="text-[11px] font-semibold text-indigo-600 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
         >
-          Reenviar código
+          {cooldown > 0 ? `Reenviar en ${cooldown}s` : "Reenviar código"}
         </button>
       </div>
     </div>

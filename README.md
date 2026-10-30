@@ -1,112 +1,137 @@
 # Reporte de Horarios
 
-Prototipo frontend en Next.js (App Router), React y Tailwind CSS para reportar
-problemas de horarios académicos y consultar su estado.
+Aplicación web para reportar problemas de horarios académicos y consultar su
+estado. Frontend en Next.js (App Router), React y Tailwind CSS; backend en
+Supabase (Postgres + RLS) y correo transaccional con Resend o Gmail SMTP.
 
 ## Rutas
 
-| Ruta         | Descripción                                                     |
-| ------------ | --------------------------------------------------------------- |
-| `/`          | Inicio, accesos a reportar y consultar.                          |
+| Ruta         | Descripción                                                          |
+| ------------ | -------------------------------------------------------------------- |
+| `/`          | Inicio, accesos a reportar y consultar.                              |
 | `/reportar`  | Formulario tradicional, chatbot interactivo, resumen y consola JSON. |
-| `/consultar` | Consulta de un reporte mediante ticket + cédula.                 |
+| `/consultar` | Consulta de un reporte mediante ticket + cédula.                     |
+
+## Arquitectura
+
+```
+Navegador
+  │  fetch JSON (sin claves de Supabase)
+  ▼
+Next.js Route Handlers  (/api/*)
+  │  service_role + reglas + tokens firmados
+  ▼
+Supabase Postgres  ── RLS activo, sin acceso directo para anon
+  │
+  └── Resend o Gmail SMTP (código de verificación y confirmación)
+```
+
+- El navegador **nunca** recibe la `service_role` ni habla directo con la base
+  de datos.
+- Las reglas de negocio (duplicados, límite diario, ticket único) se ejecutan
+  dentro de una función de Postgres, con un advisory lock por cédula.
+- El código de verificación se genera y valida en el servidor. El cliente solo
+  recibe un **token firmado** (HMAC, 20 minutos) que autoriza crear el reporte.
 
 ## Funcionalidad
 
-- **Formulario Tradicional** con `ci`, nombre, correo, materia (`nrc`), tipo de
-  error (`tipo_error`) y motivo.
-- **Catálogo de materias desde CSV** (`data/materias.csv`), leído en el servidor
-  en cada solicitud. No hay materias hardcodeadas en el código.
-- **Verificación de correo simulada**: genera un código de 6 dígitos, lo muestra
-  en pantalla (entorno demo) y exige confirmarlo antes de enviar.
-- **Reglas de negocio**:
-  - Se bloquea un duplicado con la misma cédula + NRC + tipo de error dentro de
-    las últimas 24 horas.
-  - Se permite un máximo de 5 reportes por cédula por día calendario.
-- **Ticket único** con formato `TK-XXXXXX`; se comprueba contra los tickets ya
-  emitidos en este navegador.
-- **Modal de éxito** con ticket copiable, estado inicial y confirmación de correo
-  simulada.
-- **Persistencia local** en `localStorage`, con estado global en React Context.
-  Sobrevive recargas y se sincroniza entre pestañas del mismo navegador.
-- **Consulta protegida** con ticket + cédula, sin revelar cuál dato falló.
-- **Notificaciones simuladas**: se registran en `localStorage` y en la consola
-  del navegador. No se envía correo real todavía.
-- **Chatbot interactivo**: guía paso a paso (cédula, nombre, correo con verificación simulada, materia, tipo de error y motivo), aplica las mismas reglas que el formulario y entrega el ticket en la conversación.
-- **Consola JSON**: panel lateral con los reportes en tiempo real (`ci`, `nrc`, `tipo_error`, `motivo`, `ticket`). Se apaga con `NEXT_PUBLIC_MOSTRAR_CONSOLA=false`.
-- **Supabase preparado**: `guardarEnSupabase(reporte)` está comentada en `lib/reportes/almacen.ts`.
-
-## Reglas y configuración
-
-Los valores están centralizados en `lib/config.ts`:
-
-```ts
-export const CONFIG = {
-  maxReportesPorDia: 5,
-  ventanaDuplicadosHoras: 24,
-  duracionCodigoVerificacionMinutos: 10,
-  claves: {
-    reportes: "reportes-horarios:reportes:v1",
-    notificaciones: "reportes-horarios:notificaciones:v1",
-  },
-} as const;
-```
-
-## Catálogo CSV
-
-Edita `data/materias.csv`. Formato esperado:
-
-```csv
-nrc,materia,docente,horario,aula
-10245,Cálculo Diferencial,Ing. María Torres,Lun y Mié · 08:00 – 10:00,B-204
-```
-
-- `nrc` y `materia` son obligatorios.
-- `docente`, `horario` y `aula` son opcionales.
-- Se admiten campos entre comillas y comillas escapadas.
-- `/reportar` es dinámica (`force-dynamic`), por lo que los cambios al CSV se
-  reflejan sin reconstruir la aplicación.
-
-## Estructura
-
-```
-app/
-  layout.tsx                     # Metadata y <ReportesProvider>
-  (portal)/
-    layout.tsx                   # Header, main y footer compartidos
-    page.tsx                     # Inicio
-    reportar/
-      page.tsx                   # Server component: lee el CSV
-      ReportarView.tsx           # Pestañas, formulario y resumen
-    consultar/
-      page.tsx
-      ConsultarView.tsx          # Ticket + cédula y resultado
-components/
-  FormularioTradicional.tsx      # Validación, reglas y envío
-  VerificacionCorreo.tsx         # Código demo de 6 dígitos
-  ModalExito.tsx                 # Ticket y confirmación simulada
-  ResumenReportes.tsx            # Estado global agregado
-  ReporteTabs.tsx
-  ChatbotPanel.tsx
-  SiteHeader.tsx / SiteFooter.tsx
-  icons.tsx
-context/
-  ReportesContext.tsx            # Estado global + casos de uso
-lib/
-  catalogo-materias.ts           # Lectura y parser del CSV (servidor)
-  catalogos.ts                   # Tipos de error y estados
-  config.ts
-  notificaciones.ts              # Correo simulado
-  reportes/
-    almacen.ts                   # localStorage (punto de cambio por API)
-    reglas.ts                    # Duplicados, límite y ticket
-  validaciones.ts
-  types.ts
-data/
-  materias.csv
-```
+- **Formulario tradicional** con cédula, nombre, correo, materia (`nrc`), tipo
+  de error y motivo.
+- **Catálogo de materias en Supabase** (tabla `materias`), importado desde
+  `data/materias.csv` con `supabase/seed.sql`.
+- **Verificación de correo real** con código de 6 dígitos enviado por Resend o
+  Gmail SMTP.
+  En desarrollo, si no hay `RESEND_API_KEY`, el código se muestra en pantalla.
+- **Reglas de negocio en el servidor**:
+  - Duplicado con la misma cédula + NRC + tipo de error en 24 horas.
+  - Máximo 5 reportes por cédula por día calendario (`America/Guayaquil`).
+- **Ticket único** `TK-XXXXXX` generado en Postgres.
+- **Consulta protegida** por ticket + cédula, sin revelar cuál dato falló.
+- **Correo de confirmación** con el ticket (best-effort: si falla, el reporte
+  ya quedó registrado).
+- **Chatbot interactivo** con el mismo flujo y las mismas reglas que el
+  formulario.
+- **Historial de estados** en `reporte_eventos` (trigger al cambiar `estado`).
 
 ## Puesta en marcha
+
+### 1. Base de datos
+
+En el dashboard de Supabase → **SQL Editor**, ejecuta en este orden:
+
+1. `supabase/migrations/0001_init.sql` — tablas, índices, RLS, triggers y la
+   función `registrar_reporte`.
+2. `supabase/seed.sql` — catálogo inicial de materias.
+
+También puedes usar la CLI:
+
+```bash
+supabase link --project-ref <ref>
+supabase db push
+```
+
+### 2. Variables de entorno
+
+```bash
+cp .env.example .env.local
+```
+
+Completa:
+
+| Variable                        | Dónde se obtiene                                |
+| ------------------------------- | ----------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase → Project Settings → API               |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API               |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase → Project Settings → API (secreta)     |
+| `VERIFICACION_SECRET`           | `openssl rand -hex 32`                          |
+| `RESEND_API_KEY`                | Resend → API Keys (opcional)                    |
+| `GMAIL_USER`                    | Tu correo de Gmail (opcional)                   |
+| `GMAIL_APP_PASSWORD`            | Contraseña de aplicación de Google (opcional)   |
+| `EMAIL_FROM`                    | Remitente; vacío usa el proveedor configurado   |
+
+`SUPABASE_SERVICE_ROLE_KEY` y `VERIFICACION_SECRET` **no** deben llevar el
+prefijo `NEXT_PUBLIC_` ni subirse al repositorio.
+
+### 3. Correo
+
+El orden de preferencia es: **Resend → Gmail SMTP → modo desarrollo**.
+
+**Opción A: Gmail SMTP (rápida para probar)**
+
+1. Activa la verificación en 2 pasos en tu cuenta de Google.
+2. Entra a [myaccount.google.com/security](https://myaccount.google.com/security)
+   y abre **Contraseñas de aplicaciones**.
+3. Crea una para “Correo” y copia la clave de 16 caracteres.
+4. En `.env.local`:
+
+```bash
+GMAIL_USER=tucorreo@gmail.com
+GMAIL_APP_PASSWORD=abcd efgh ijkl mnop
+```
+
+No uses tu contraseña normal de Gmail. Si es una cuenta institucional, el
+administrador puede tener las contraseñas de aplicación desactivadas.
+
+**Opción B: Resend (recomendada para producción)**
+
+1. Crea una cuenta en [resend.com](https://resend.com) y una API key con
+   permiso *Sending access*.
+2. Sin dominio propio puedes usar
+   `EMAIL_FROM="Reportes Horarios <onboarding@resend.dev>"`, pero Resend solo
+   entregará a la dirección del dueño de la cuenta.
+3. Con dominio, verifica los registros DNS y usa
+   `EMAIL_FROM="Reportes Horarios <reportes@tudominio.com>"`.
+
+```bash
+RESEND_API_KEY=re_...
+EMAIL_FROM="Reportes Horarios <onboarding@resend.dev>"
+```
+
+**Modo desarrollo:** sin `RESEND_API_KEY` ni credenciales de Gmail, el código se
+imprime en la consola del servidor y se devuelve como `codigoDemo`
+(controlado por `MOSTRAR_CODIGO_DEMO`).
+
+### 4. Ejecutar
 
 ```bash
 npm install
@@ -121,24 +146,109 @@ npm run start
 npm run typecheck
 ```
 
-## Migración futura a API + base de datos
+## API
 
-El prototipo está separado para facilitar el cambio:
+| Método | Ruta                          | Descripción                                      |
+| ------ | ----------------------------- | ------------------------------------------------ |
+| `POST` | `/api/verificacion/solicitar` | Genera y envía un código de 6 dígitos.           |
+| `POST` | `/api/verificacion/validar`   | Valida el código y devuelve un token firmado.    |
+| `POST` | `/api/reportes`               | Crea el reporte (exige token de verificación).   |
+| `POST` | `/api/reportes/consultar`     | Consulta por ticket + cédula (POST evita la CI en logs/URL). |
+| `GET`  | `/api/materias?q=`            | Catálogo activo, con búsqueda opcional.          |
 
-1. Reemplazar `leerReportes` y `guardarReportes` de `lib/reportes/almacen.ts` por
-   llamadas `fetch` a la API.
-2. Mover `validarReglas`, la generación del ticket y el estado a la API para que
-   las reglas no puedan saltarse desde el cliente.
-3. Reemplazar `VerificacionCorreo` por un flujo de código enviado y validado en
-   el servidor.
-4. Reemplazar `lib/notificaciones.ts` por el proveedor real de correo.
-5. Sustituir `lib/catalogo-materias.ts` por el catálogo académico oficial.
-6. Añadir `/admin` para gestionar estados y reportes.
+Contrato de error:
 
-## Limitaciones del prototipo
+```json
+{
+  "ok": false,
+  "codigo": "duplicado",
+  "mensaje": "Ya registraste un reporte...",
+  "ticket": "TK-123456"
+}
+```
 
-- La verificación de correo, los tickets y las notificaciones se generan en el
-  cliente. Son demostrativos, no seguros para producción.
-- Los reportes solo son visibles en el navegador donde se crearon.
-- El catálogo se lee del sistema de archivos local.
-- El código de verificación del chatbot se muestra en la conversación (demo).
+Códigos: `validacion`, `verificacion`, `duplicado`, `limite`, `materia`,
+`no_encontrado`, `interno`.
+
+## Modelo de datos
+
+- `materias`: catálogo (`nrc` PK, nombre, docente, horario, aula, activo).
+- `reportes`: reporte con copia del nombre/aula de la materia al momento del
+  envío, ticket único, estado y fechas.
+- `reporte_eventos`: historial de cambios de estado.
+- `codigos_verificacion`: hash del código, expiración, intentos, consumo e IP
+  hasheada.
+
+RLS está activo en todas las tablas. Solo `materias` tiene lectura pública; el
+resto queda denegado para `anon` y `authenticated`. La API usa `service_role`.
+
+## Estructura
+
+```
+app/
+  api/
+    materias/route.ts
+    reportes/route.ts
+    reportes/consultar/route.ts
+    verificacion/solicitar/route.ts
+    verificacion/validar/route.ts
+  (portal)/
+    layout.tsx
+    page.tsx
+    reportar/page.tsx            # Server component: catálogo desde Supabase
+    reportar/ReportarView.tsx
+    consultar/page.tsx
+    consultar/ConsultarView.tsx
+components/
+  FormularioTradicional.tsx      # Validación cliente + envío a la API
+  VerificacionCorreo.tsx         # Código real vía API
+  ChatbotPanel.tsx
+  ModalExito.tsx
+  ResumenReportes.tsx            # Reportes de la sesión (panel dev)
+  ConsolaJson.tsx                # Panel dev; apagar en producción
+  ReporteTabs.tsx
+  SiteHeader.tsx / SiteFooter.tsx
+  icons.tsx
+context/
+  ReportesContext.tsx            # Estado de sesión + llamadas a la API
+lib/
+  api/                           # Helpers de route handlers (respuestas, IP)
+  api-cliente.ts                 # fetch tipado para el navegador
+  supabase/
+    admin.ts                     # Cliente service_role (solo servidor)
+    materias.ts
+    reportes.ts
+  verificacion-servidor.ts       # Códigos, límites y tokens HMAC
+  email.ts                       # Resend / Gmail SMTP
+  catalogo-materias.ts           # Respaldo CSV si falta configuración
+  catalogos.ts
+  config.ts
+  reportes/formato.ts
+  types.ts
+  validaciones.ts
+supabase/
+  migrations/0001_init.sql
+  seed.sql
+data/
+  materias.csv
+```
+
+## Seguridad
+
+- `service_role` solo en servidor; RLS bloquea el acceso directo.
+- La función `registrar_reporte` es `security definer` y tiene `EXECUTE`
+  revocado para `anon`/`authenticated`.
+- Tokens HMAC con expiración; códigos guardados como hash, con límite de
+  intentos y expiración.
+- Límites de solicitud de códigos por correo (5/hora, 1 cada 60 s) y por IP
+  (20/hora).
+- La consola JSON muestra cédula y motivo: deja
+  `NEXT_PUBLIC_MOSTRAR_CONSOLA=false` en producción.
+
+## Pendientes
+
+- Panel `/admin` con Supabase Auth y roles para cambiar estados.
+- Rate limit distribuido (Upstash/Cloudflare) además del control en Postgres.
+- Cron (`pg_cron`) para ejecutar `limpiar_codigos_vencidos()`.
+- Reintentos y cola para el correo de confirmación.
+- Pruebas automatizadas de las reglas y de los route handlers.

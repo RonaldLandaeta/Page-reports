@@ -10,31 +10,32 @@ import {
   type ReactNode,
 } from "react";
 
-import { CONFIG } from "@/lib/config";
-import { enviarConfirmacion } from "@/lib/notificaciones";
-import { guardarReportes, leerReportes } from "@/lib/reportes/almacen";
-import {
-  generarIdReporte,
-  generarTicketUnico,
-  validarReglas,
-  type FalloRegla,
-} from "@/lib/reportes/reglas";
+import { ErrorApi, postJson } from "@/lib/api-cliente";
 import type { NuevoReporteInput, Reporte } from "@/lib/types";
 import { normalizarTicket } from "@/lib/validaciones";
 
+export type CodigoFallo =
+  | "duplicado"
+  | "limite"
+  | "verificacion"
+  | "materia"
+  | "validacion"
+  | "interno"
+  | "red";
+
 export type ResultadoRegistro =
   | { ok: true; reporte: Reporte }
-  | FalloRegla;
+  | { ok: false; codigo: CodigoFallo; mensaje: string; ticket?: string };
 
 interface ReportesContextValue {
-  /** Reportes agregados, más recientes primero. */
+  /** Reportes creados en esta pestaña (solo para los paneles de desarrollo). */
   reportes: Reporte[];
-  /** Indica si ya se leyó el almacenamiento local en el cliente. */
+  /** Indica que el cliente ya montó; evita parpadeos de hidratación. */
   hidratado: boolean;
-  /** Valida reglas, genera el ticket, persiste y devuelve el reporte. */
+  /** Envía el reporte a la API, que valida reglas, ticket y persistencia. */
   registrarReporte: (data: NuevoReporteInput) => Promise<ResultadoRegistro>;
-  /** Busca un reporte por ticket + cédula (consulta protegida). */
-  buscarReporte: (ticket: string, ci: string) => Reporte | null;
+  /** Consulta protegida por ticket + cédula. */
+  buscarReporte: (ticket: string, ci: string) => Promise<Reporte | null>;
 }
 
 const ReportesContext = createContext<ReportesContextValue | null>(null);
@@ -44,65 +45,51 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
   const [hidratado, setHidratado] = useState(false);
 
   useEffect(() => {
-    setReportes(leerReportes());
     setHidratado(true);
-  }, []);
-
-  // Mantiene sincronizadas las pestañas abiertas del mismo navegador.
-  useEffect(() => {
-    function sincronizar(event: StorageEvent) {
-      if (event.key === CONFIG.claves.reportes || event.key === null) {
-        setReportes(leerReportes());
-      }
-    }
-
-    window.addEventListener("storage", sincronizar);
-    return () => window.removeEventListener("storage", sincronizar);
   }, []);
 
   const registrarReporte = useCallback(
     async (data: NuevoReporteInput): Promise<ResultadoRegistro> => {
-      // Se lee el almacenamiento como fuente de verdad para evitar estados
-      // obsoletos si hay varias pestañas o si aún no terminó la hidratación.
-      const actuales = leerReportes();
-      const validacion = validarReglas(actuales, data);
+      try {
+        const { reporte } = await postJson<{ reporte: Reporte }>(
+          "/api/reportes",
+          data,
+        );
 
-      if (!validacion.ok) {
-        return validacion;
+        setReportes((previos) => [reporte, ...previos]);
+        return { ok: true, reporte };
+      } catch (error) {
+        if (error instanceof ErrorApi) {
+          return {
+            ok: false,
+            codigo: error.codigo === "no_encontrado" ? "interno" : error.codigo,
+            mensaje: error.message,
+            ticket: error.ticket,
+          };
+        }
+
+        throw error;
       }
-
-      const reporte: Reporte = {
-        ...data,
-        id: generarIdReporte(),
-        ticket: generarTicketUnico(actuales),
-        creadoEn: new Date().toISOString(),
-        estado: "pendiente",
-      };
-
-      const siguientes = [reporte, ...actuales];
-      guardarReportes(siguientes);
-      setReportes(siguientes);
-      // Al conectar Supabase (ver almacen.ts), persistir aquí en remoto:
-      // await guardarEnSupabase(reporte);
-      enviarConfirmacion(reporte);
-
-      return { ok: true, reporte };
     },
     [],
   );
 
   const buscarReporte = useCallback(
-    (ticket: string, ci: string): Reporte | null => {
-      const ticketNormalizado = normalizarTicket(ticket);
-      const ciNormalizada = ci.trim();
+    async (ticket: string, ci: string): Promise<Reporte | null> => {
+      try {
+        const { reporte } = await postJson<{ reporte: Reporte }>(
+          "/api/reportes/consultar",
+          { ticket: normalizarTicket(ticket), ci: ci.trim() },
+        );
 
-      return (
-        leerReportes().find(
-          (reporte) =>
-            normalizarTicket(reporte.ticket) === ticketNormalizado &&
-            reporte.ci === ciNormalizada,
-        ) ?? null
-      );
+        return reporte;
+      } catch (error) {
+        if (error instanceof ErrorApi && error.codigo === "no_encontrado") {
+          return null;
+        }
+
+        throw error;
+      }
     },
     [],
   );

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { obtenerMaterias } from "@/lib/catalogo-materias";
+import { listarMaterias } from "@/lib/supabase/materias";
 
 import { ReportarView } from "./ReportarView";
 
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ReportarPage() {
-  const materias = await obtenerMaterias();
+  const materias = await listarMaterias();
 
   return <ReportarView materias={materias} />;
 }

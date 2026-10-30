@@ -12,20 +12,15 @@ import {
 } from "react";
 
 import { useReportes, type ResultadoRegistro } from "@/context/ReportesContext";
+import { ErrorApi, postJson } from "@/lib/api-cliente";
 import { TIPOS_ERROR, getTipoErrorLabel } from "@/lib/catalogos";
-import { validarDuplicado, validarLimiteDiario } from "@/lib/reportes/reglas";
-import type { Materia, NuevoReporteInput, Reporte, TipoError } from "@/lib/types";
+import type { Materia, NuevoReporteInput, TipoError } from "@/lib/types";
 import {
   CEDULA_MAX_DIGITOS,
   CEDULA_MIN_DIGITOS,
   esCedulaValida,
   esCorreoValido,
 } from "@/lib/validaciones";
-import {
-  generarCodigoVerificacion,
-  verificarCodigo,
-  type CodigoVerificacion,
-} from "@/lib/verificacion";
 
 import { ArrowRightIcon, ChatIcon, SendIcon } from "./icons";
 
@@ -61,7 +56,7 @@ interface Datos {
   ci?: string;
   nombre?: string;
   correo?: string;
-  codigo?: CodigoVerificacion;
+  verificacionToken?: string;
   materia?: Materia;
   tipo_error?: TipoError;
 }
@@ -80,7 +75,6 @@ interface MateriaIndexada {
 
 interface ContextoProceso {
   datos: Datos;
-  reportes: Reporte[];
   indice: MateriaIndexada[];
   mapa: Map<string, Materia>;
   registrar: (data: NuevoReporteInput) => Promise<ResultadoRegistro>;
@@ -215,7 +209,7 @@ async function procesar(
   texto: string,
   contexto: ContextoProceso,
 ): Promise<Respuesta> {
-  const { datos, reportes, indice, mapa, registrar } = contexto;
+  const { datos, indice, mapa, registrar } = contexto;
 
   switch (paso) {
     case "ci": {
@@ -225,10 +219,6 @@ async function procesar(
           `Esa cédula no es válida: debe tener entre ${CEDULA_MIN_DIGITOS} y ${CEDULA_MAX_DIGITOS} dígitos.`,
         );
       }
-
-      // Se comprueba ahora para no hacer responder todo al usuario en vano.
-      const limite = validarLimiteDiario(reportes, texto);
-      if (!limite.ok) return bloqueo(limite.mensaje);
 
       datos.ci = texto.trim();
       return avanzar("nombre");
@@ -253,77 +243,99 @@ async function procesar(
         );
       }
 
-      const codigo = generarCodigoVerificacion();
-      datos.correo = correo;
-      datos.codigo = codigo;
+      try {
+        const resultado = await postJson<{ codigoDemo?: string }>(
+          "/api/verificacion/solicitar",
+          { correo },
+        );
 
-      return avanzar("verificacion", [
-        {
-          texto: `Te enviamos un código de 6 dígitos a ${correo} (simulado).`,
-        },
-        {
-          texto: `En este prototipo no se envía un correo real. Usa el código: ${codigo.valor}`,
-        },
-      ]);
+        datos.correo = correo;
+        datos.verificacionToken = undefined;
+
+        const mensajes: ContenidoBot[] = [
+          { texto: `Te enviamos un código de 6 dígitos a ${correo}.` },
+        ];
+
+        if (resultado.codigoDemo) {
+          mensajes.push({
+            texto: `Entorno de desarrollo: usa el código ${resultado.codigoDemo}.`,
+          });
+        }
+
+        return avanzar("verificacion", mensajes);
+      } catch (error) {
+        return rechazo(
+          "correo",
+          error instanceof ErrorApi
+            ? error.message
+            : "No pudimos enviar el código de verificación. Intenta de nuevo.",
+        );
+      }
     }
 
     case "verificacion": {
-      const { correo, codigo } = datos;
+      const { correo } = datos;
 
-      if (!correo || !codigo) {
+      if (!correo) {
         return bloqueo(
           "Perdí los datos de la verificación. Empecemos de nuevo.",
         );
       }
 
       if (COMANDO_REENVIAR.has(normalizar(texto))) {
-        const nuevoCodigo = generarCodigoVerificacion();
-        datos.codigo = nuevoCodigo;
+        try {
+          const resultado = await postJson<{ codigoDemo?: string }>(
+            "/api/verificacion/solicitar",
+            { correo },
+          );
 
-        return {
-          mensajes: [
-            {
-              texto: `Generé un nuevo código (simulado): ${nuevoCodigo.valor}`,
-            },
-            { texto: PREGUNTAS.verificacion },
-          ],
-          paso: "verificacion",
-        };
+          const mensajes: ContenidoBot[] = [
+            { texto: `Te enviamos un nuevo código a ${correo}.` },
+          ];
+
+          if (resultado.codigoDemo) {
+            mensajes.push({
+              texto: `Entorno de desarrollo: usa el código ${resultado.codigoDemo}.`,
+            });
+          }
+
+          return {
+            mensajes: [...mensajes, { texto: PREGUNTAS.verificacion }],
+            paso: "verificacion",
+          };
+        } catch (error) {
+          return rechazo(
+            "verificacion",
+            error instanceof ErrorApi
+              ? error.message
+              : "No pudimos reenviar el código. Intenta de nuevo.",
+          );
+        }
       }
 
       if (!/^\d{6}$/.test(texto.trim())) {
         return rechazo(
           "verificacion",
-          "El código debe tener exactamente 6 dígitos. Escríbelo o pulsa «Reenviar código» para generar otro.",
+          "El código debe tener exactamente 6 dígitos. Escríbelo o pulsa «Reenviar código».",
         );
       }
 
-      const resultado = verificarCodigo(codigo, texto);
+      try {
+        const { token } = await postJson<{ token: string }>(
+          "/api/verificacion/validar",
+          { correo, codigo: texto.trim() },
+        );
 
-      if (resultado === "expirado") {
-        const nuevoCodigo = generarCodigoVerificacion();
-        datos.codigo = nuevoCodigo;
-
-        return {
-          mensajes: [
-            {
-              texto: `El código anterior expiró. Te generé uno nuevo (simulado): ${nuevoCodigo.valor}`,
-            },
-            { texto: PREGUNTAS.verificacion },
-          ],
-          paso: "verificacion",
-        };
-      }
-
-      if (resultado !== "ok") {
+        datos.verificacionToken = token;
+        return avanzar("nrc", [{ texto: "Correo verificado correctamente." }]);
+      } catch (error) {
         return rechazo(
           "verificacion",
-          "El código no coincide. Revisa los 6 dígitos o pulsa «Reenviar código» para generar otro.",
+          error instanceof ErrorApi
+            ? error.message
+            : "No pudimos validar el código. Intenta de nuevo.",
         );
       }
-
-      datos.codigo = undefined;
-      return avanzar("nrc", [{ texto: "Correo verificado correctamente." }]);
     }
 
     case "nrc": {
@@ -359,18 +371,6 @@ async function procesar(
         return rechazo("tipo_error", "Elige uno de los tipos de problema de la lista.");
       }
 
-      const { ci, materia } = datos;
-      if (ci && materia) {
-        const duplicado = validarDuplicado(reportes, ci, materia.nrc, tipo);
-        if (!duplicado.ok) {
-          return bloqueo(
-            duplicado.ticket
-              ? `${duplicado.mensaje} Tu ticket anterior es ${duplicado.ticket}.`
-              : duplicado.mensaje,
-          );
-        }
-      }
-
       datos.tipo_error = tipo;
       return avanzar("motivo");
     }
@@ -384,8 +384,16 @@ async function procesar(
         );
       }
 
-      const { ci, nombre, correo, materia, tipo_error } = datos;
-      if (!ci || !nombre || !correo || !materia || !tipo_error) {
+      const { ci, nombre, correo, materia, tipo_error, verificacionToken } =
+        datos;
+      if (
+        !ci ||
+        !nombre ||
+        !correo ||
+        !materia ||
+        !tipo_error ||
+        !verificacionToken
+      ) {
         return bloqueo("Perdí algunos datos de la conversación. Empecemos de nuevo.");
       }
 
@@ -397,8 +405,7 @@ async function procesar(
           nrc: materia.nrc,
           tipo_error,
           motivo,
-          materiaNombre: materia.nombre,
-          materiaAula: materia.aula,
+          verificacionToken,
         });
 
         if (!resultado.ok) {
@@ -416,7 +423,7 @@ async function procesar(
               ticket: resultado.reporte.ticket,
             },
             {
-              texto: `Guárdalo para consultar el estado en «Consultar un ticket». Te enviamos una confirmación (simulada) a ${correo}.`,
+              texto: `Guárdalo para consultar el estado en «Consultar un ticket». Te enviamos una confirmación a ${correo}.`,
             },
             { texto: REINICIO },
           ],
@@ -653,7 +660,7 @@ interface ChatbotPanelProps {
 }
 
 export function ChatbotPanel({ materias, onIrAFormulario }: ChatbotPanelProps) {
-  const { reportes, registrarReporte } = useReportes();
+  const { registrarReporte } = useReportes();
 
   const [mensajes, setMensajes] = useState<Mensaje[]>(MENSAJES_INICIALES);
   const [paso, setPaso] = useState<Paso>("ci");
@@ -663,7 +670,6 @@ export function ChatbotPanel({ materias, onIrAFormulario }: ChatbotPanelProps) {
   const datosRef = useRef<Datos>({});
   const pasoRef = useRef<Paso>("ci");
   const ocupadoRef = useRef(false);
-  const reportesRef = useRef(reportes);
   const siguienteId = useRef(MENSAJES_INICIALES.length + 1);
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
   const interactuado = useRef(false);
@@ -682,10 +688,6 @@ export function ChatbotPanel({ materias, onIrAFormulario }: ChatbotPanelProps) {
     () => new Map(materias.map((materia) => [materia.nrc, materia])),
     [materias],
   );
-
-  useEffect(() => {
-    reportesRef.current = reportes;
-  }, [reportes]);
 
   useEffect(
     () => () => {
@@ -732,7 +734,6 @@ export function ChatbotPanel({ materias, onIrAFormulario }: ChatbotPanelProps) {
         try {
           const respuesta = await procesar(pasoActual, texto, {
             datos: datosRef.current,
-            reportes: reportesRef.current,
             indice,
             mapa,
             registrar: registrarReporte,

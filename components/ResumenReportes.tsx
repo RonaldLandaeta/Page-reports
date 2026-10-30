@@ -30,11 +30,11 @@ export function ResumenReportes() {
             Reportes registrados
           </h2>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            Estado global persistido en este navegador.
+            Reportes creados en esta sesión.
           </p>
         </div>
         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          Local
+          Sesión
         </span>
       </div>
 
@@ -128,7 +128,7 @@ export function ResumenReportes() {
           en {CONFIG.ventanaDuplicadosHoras} h.
         </p>
         <p className="mt-1 text-[11px] leading-5 text-slate-400">
-          Los datos viven en localStorage y se borran al limpiar el navegador.
+          Los reportes se guardan en Supabase y se validan en el servidor.
         </p>
       </div>
     </aside>

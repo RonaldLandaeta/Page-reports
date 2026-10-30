@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { useReportes } from "@/context/ReportesContext";
 import { CONFIG } from "@/lib/config";
-import { aFilaReporte } from "@/lib/reportes/almacen";
+import { aFilaReporte } from "@/lib/reportes/formato";
 
 import { CheckIcon, CopyIcon } from "./icons";
 
@@ -134,7 +134,7 @@ export function ConsolaJson() {
           {hidratado ? coloreado : <span className="text-slate-500">…</span>}
         </pre>
         <p className="border-t border-slate-800 px-4 py-2 font-mono text-[11px] leading-5 text-slate-500">
-          {"// guardarEnSupabase(reporte) → pendiente de conectar"}
+          {"// POST /api/reportes → Supabase"}
         </p>
       </div>
     </section>

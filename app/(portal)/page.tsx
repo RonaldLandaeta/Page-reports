@@ -240,8 +240,8 @@ export default function HomePage() {
       <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-xs leading-5 text-slate-500 sm:flex-row sm:items-center sm:justify-between">
         <p className="flex items-start gap-2">
           <ShieldIcon className="mt-0.5 size-4 shrink-0 text-slate-400" />
-          Prototipo: los reportes se guardan en este navegador. La verificación
-          y las notificaciones son simuladas.
+          Los reportes se guardan en Supabase. La verificación de correo y los
+          tickets se validan en el servidor.
         </p>
         <p className="flex shrink-0 items-center gap-2 text-slate-400">
           <MailIcon className="size-4" />

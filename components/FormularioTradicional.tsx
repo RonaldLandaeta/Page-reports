@@ -15,7 +15,10 @@ import {
 
 import { AlertIcon, ClockIcon, SendIcon, ShieldIcon } from "./icons";
 import { ModalExito } from "./ModalExito";
-import { VerificacionCorreo } from "./VerificacionCorreo";
+import {
+  VerificacionCorreo,
+  type VerificacionAprobada,
+} from "./VerificacionCorreo";
 
 interface FormState {
   ci: string;
@@ -74,7 +77,8 @@ export function FormularioTradicional({
   const [formulario, setFormulario] = useState<FormState>(FORMULARIO_INICIAL);
   const [errores, setErrores] = useState<Errores>({});
   const [reporteCreado, setReporteCreado] = useState<Reporte | null>(null);
-  const [correoVerificado, setCorreoVerificado] = useState<string | null>(null);
+  const [verificacion, setVerificacion] =
+    useState<VerificacionAprobada | null>(null);
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -104,13 +108,13 @@ export function FormularioTradicional({
 
   function actualizarCorreo(valor: string) {
     actualizar("correo", valor);
-    setCorreoVerificado(null);
+    setVerificacion(null);
   }
 
-  function manejarVerificacion(correo: string | null) {
-    setCorreoVerificado(correo);
+  function manejarVerificacion(nueva: VerificacionAprobada | null) {
+    setVerificacion(nueva);
 
-    if (correo) {
+    if (nueva) {
       setErrores((previos) => {
         if (!previos.correo) return previos;
 
@@ -138,7 +142,7 @@ export function FormularioTradicional({
 
     if (!esCorreoValido(correo)) {
       nuevosErrores.correo = "Ingresa un correo electrónico válido.";
-    } else if (correoVerificado !== correo) {
+    } else if (verificacion?.correo !== correo) {
       nuevosErrores.correo = "Verifica tu correo antes de enviar el reporte.";
     }
 
@@ -161,7 +165,7 @@ export function FormularioTradicional({
   function limpiarFormulario() {
     setFormulario(FORMULARIO_INICIAL);
     setErrores({});
-    setCorreoVerificado(null);
+    setVerificacion(null);
     setErrorEnvio(null);
   }
 
@@ -180,7 +184,7 @@ export function FormularioTradicional({
       return;
     }
 
-    if (!esTipoError(formulario.tipo_error) || !materiaSeleccionada) return;
+    if (!esTipoError(formulario.tipo_error) || !verificacion) return;
 
     setEnviando(true);
     setErrorEnvio(null);
@@ -193,8 +197,7 @@ export function FormularioTradicional({
         nrc: formulario.nrc,
         tipo_error: formulario.tipo_error,
         motivo: formulario.motivo.trim(),
-        materiaNombre: materiaSeleccionada.nombre,
-        materiaAula: materiaSeleccionada.aula,
+        verificacionToken: verificacion.token,
       });
 
       if (!resultado.ok) {
@@ -209,7 +212,7 @@ export function FormularioTradicional({
       setReporteCreado(resultado.reporte);
       setFormulario(FORMULARIO_INICIAL);
       setErrores({});
-      setCorreoVerificado(null);
+      setVerificacion(null);
       setErrorEnvio(null);
     } catch {
       setErrorEnvio(

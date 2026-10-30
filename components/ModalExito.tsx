@@ -157,9 +157,8 @@ export function ModalExito({ reporte, onClose }: ModalExitoProps) {
           <div className="mt-4 flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs leading-5 text-emerald-800 ring-1 ring-emerald-100">
             <MailIcon className="mt-0.5 size-4 shrink-0 text-emerald-600" />
             <p>
-              Confirmación simulada enviada a{" "}
-              <span className="font-semibold">{reporte.correo}</span>. En
-              producción se enviará por el proveedor de correo.
+              Confirmación enviada a{" "}
+              <span className="font-semibold">{reporte.correo}</span>.
             </p>
           </div>
 

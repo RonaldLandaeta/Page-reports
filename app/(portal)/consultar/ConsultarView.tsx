@@ -62,6 +62,7 @@ export function ConsultarView() {
   const [ci, setCi] = useState("");
   const [errores, setErrores] = useState<ErroresConsulta>({});
   const [reporte, setReporte] = useState<Reporte | null>(null);
+  const [consultando, setConsultando] = useState(false);
 
   function limpiarError(campo: "ticket" | "ci") {
     setErrores((previos) => {
@@ -72,8 +73,10 @@ export function ConsultarView() {
     });
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (consultando) return;
 
     const nuevosErrores: ErroresConsulta = {};
 
@@ -94,17 +97,30 @@ export function ConsultarView() {
       return;
     }
 
-    const encontrado = buscarReporte(normalizarTicket(ticket), ci);
+    setConsultando(true);
 
-    if (!encontrado) {
+    try {
+      const encontrado = await buscarReporte(normalizarTicket(ticket), ci);
+
+      if (!encontrado) {
+        setErrores({
+          general:
+            "No encontramos un reporte con ese ticket y cédula. Verifica ambos datos o revisa el correo de confirmación.",
+        });
+        return;
+      }
+
+      setReporte(encontrado);
+    } catch (error) {
       setErrores({
         general:
-          "No encontramos un reporte con ese ticket y cédula. Verifica ambos datos o revisa el correo de confirmación.",
+          error instanceof Error
+            ? error.message
+            : "No pudimos consultar el reporte. Intenta de nuevo en unos segundos.",
       });
-      return;
+    } finally {
+      setConsultando(false);
     }
-
-    setReporte(encontrado);
   }
 
   return (
@@ -238,10 +254,20 @@ export function ConsultarView() {
             </p>
             <button
               type="submit"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:bg-indigo-800"
+              disabled={consultando}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-indigo-400"
             >
-              <SearchIcon className="size-4" />
-              Consultar estado
+              {consultando ? (
+                <>
+                  <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                  Consultando...
+                </>
+              ) : (
+                <>
+                  <SearchIcon className="size-4" />
+                  Consultar estado
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -348,8 +374,7 @@ export function ConsultarView() {
             ¿Dónde está mi ticket?
           </h2>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            Se muestra al enviar el reporte y se envía al correo registrado. En
-            este prototipo el correo es simulado.
+            Se muestra al enviar el reporte y se envía al correo registrado.
           </p>
         </div>
 
@@ -368,8 +393,8 @@ export function ConsultarView() {
       </div>
 
       <p className="mt-6 text-center text-[11px] leading-5 text-slate-400">
-        Prototipo: la consulta lee los reportes guardados en este navegador. Al
-        integrar la API, se validará en el servidor.
+        La consulta se valida en el servidor: el ticket y la cédula deben
+        coincidir.
       </p>
     </div>
   );
