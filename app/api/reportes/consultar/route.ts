@@ -1,12 +1,18 @@
+import { hashIp, ipDelCliente } from "@/lib/api/ip";
 import {
   leerCuerpo,
   respuestaError,
   respuestaOk,
   texto,
 } from "@/lib/api/respuestas";
+import {
+  consultasBloqueadas,
+  registrarConsultaFallida,
+} from "@/lib/supabase/consultas";
 import { buscarReporteEnDb } from "@/lib/supabase/reportes";
 import {
   esCedulaValida,
+  enmascararCorreo,
   esTicketValido,
   normalizarTicket,
 } from "@/lib/validaciones";
@@ -33,9 +39,20 @@ export async function POST(request: Request) {
   }
 
   try {
+    const ipHash = hashIp(ipDelCliente(request));
+
+    if (await consultasBloqueadas(ipHash)) {
+      return respuestaError(
+        "limite",
+        "Demasiadas consultas fallidas. Espera unos minutos e intenta de nuevo.",
+        429,
+      );
+    }
+
     const reporte = await buscarReporteEnDb(ticket, ci);
 
     if (!reporte) {
+      await registrarConsultaFallida(ipHash);
       // Mensaje genérico a propósito: no revelamos cuál dato falló.
       return respuestaError(
         "no_encontrado",
@@ -44,7 +61,10 @@ export async function POST(request: Request) {
       );
     }
 
-    return respuestaOk({ reporte });
+    // El correo completo no se devuelve: ticket + cédula no prueban ser el dueño.
+    return respuestaOk({
+      reporte: { ...reporte, correo: enmascararCorreo(reporte.correo) },
+    });
   } catch (error) {
     console.error("[api/reportes/consultar]", error);
     return respuestaError(

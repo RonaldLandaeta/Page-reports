@@ -29,7 +29,7 @@ const ESTILOS_ESTADO: Record<EstadoReporte, string> = {
   resuelto: "border-emerald-200 bg-emerald-50 text-emerald-700",
 };
 
-const formatoFecha = new Intl.DateTimeFormat("es-EC", {
+const formatoFecha = new Intl.DateTimeFormat("es-VE", {
   dateStyle: "medium",
   timeStyle: "short",
 });

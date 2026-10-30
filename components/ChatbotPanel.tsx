@@ -102,7 +102,7 @@ const PREGUNTAS: Record<Paso, string> = {
 const PLACEHOLDERS: Record<Paso, string> = {
   ci: "Ej. 12345678",
   nombre: "Ej. Ana Martínez",
-  correo: "nombre@est.ucab.edu.ve",
+  correo: "nombre@correo-institucional.edu.ve",
   verificacion: "Código de 6 dígitos",
   nrc: "NRC o nombre de la materia",
   tipo_error: "Elige una opción o escríbela",
@@ -248,7 +248,7 @@ async function procesar(
       }
 
       if (!esCorreoInstitucional(correo)) {
-        return rechazo("correo", mensajeCorreoInstitucional());
+        return rechazo("correo", mensajeCorreoInstitucional);
       }
 
       try {

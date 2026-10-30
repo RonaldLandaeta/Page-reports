@@ -3,6 +3,7 @@ import "server-only";
 import nodemailer, { type Transporter } from "nodemailer";
 import { Resend } from "resend";
 
+import { getTipoErrorLabel } from "@/lib/catalogos";
 import type { Reporte } from "@/lib/types";
 
 const REMITENTE_RESEND =
@@ -138,7 +139,7 @@ export async function enviarConfirmacionReporte(reporte: Reporte) {
     "",
     `Recibimos tu reporte ${reporte.ticket}.`,
     `Materia: ${reporte.materiaNombre} (NRC ${reporte.nrc})`,
-    `Tipo de error: ${reporte.tipo_error}`,
+    `Tipo de error: ${getTipoErrorLabel(reporte.tipo_error)}`,
     `Estado inicial: pendiente de revisión`,
     "",
     "Guarda el ticket. Lo necesitarás junto con tu cédula para consultar el estado.",
@@ -156,6 +157,7 @@ export async function enviarConfirmacionReporte(reporte: Reporte) {
       <table style="width:100%;font-size:14px;line-height:22px;color:#334155;border-collapse:collapse">
         <tr><td style="padding:6px 0;color:#64748b">Materia</td><td style="padding:6px 0;text-align:right;font-weight:600">${escaparHtml(reporte.materiaNombre)}</td></tr>
         <tr><td style="padding:6px 0;color:#64748b">NRC</td><td style="padding:6px 0;text-align:right;font-weight:600">${escaparHtml(reporte.nrc)}</td></tr>
+        <tr><td style="padding:6px 0;color:#64748b">Tipo de error</td><td style="padding:6px 0;text-align:right;font-weight:600">${escaparHtml(getTipoErrorLabel(reporte.tipo_error))}</td></tr>
         <tr><td style="padding:6px 0;color:#64748b">Estado</td><td style="padding:6px 0;text-align:right;font-weight:600">Pendiente de revisión</td></tr>
       </table>
       <p style="font-size:13px;line-height:20px;color:#64748b;margin:20px 0 0">

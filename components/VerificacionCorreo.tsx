@@ -10,11 +10,14 @@ import { CheckIcon, MailIcon } from "./icons";
 
 export interface VerificacionAprobada {
   correo: string;
+  ci: string;
   token: string;
 }
 
 interface VerificacionCorreoProps {
   correo: string;
+  /** Cédula a la que queda ligado el token (una cédula, varios tokens). */
+  ci: string;
   onVerifiedChange: (verificacion: VerificacionAprobada | null) => void;
 }
 
@@ -26,6 +29,7 @@ type Fase = "inicial" | "enviando" | "enviado" | "validando" | "verificado";
  */
 export function VerificacionCorreo({
   correo,
+  ci,
   onVerifiedChange,
 }: VerificacionCorreoProps) {
   const normalizado = correo.trim().toLowerCase();
@@ -86,12 +90,12 @@ export function VerificacionCorreo({
     try {
       const resultado = await postJson<{ token: string }>(
         "/api/verificacion/validar",
-        { correo: normalizado, codigo },
+        { correo: normalizado, codigo, ci },
       );
 
       setFase("verificado");
       setCodigoDemo(null);
-      onVerifiedChange({ correo: normalizado, token: resultado.token });
+      onVerifiedChange({ correo: normalizado, ci, token: resultado.token });
     } catch (fallo) {
       setFase("enviado");
       setError(

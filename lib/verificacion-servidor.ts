@@ -1,71 +1,399 @@
-export function esCorreoValido(correo: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(correo.trim());
+import "server-only";
+
+import {
+  createHmac,
+  randomInt,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
+
+import { CONFIG } from "@/lib/config";
+import { enviarCodigoVerificacion } from "@/lib/email";
+import { secretoVerificacion } from "@/lib/secreto";
+import { obtenerSupabaseAdmin } from "@/lib/supabase/admin";
+import {
+  esCedulaValida,
+  esCorreoInstitucional,
+  mensajeCorreoInstitucional,
+} from "@/lib/validaciones";
+
+export type CodigoErrorVerificacion =
+  | "validacion"
+  | "limite"
+  | "expirado"
+  | "codigo"
+  | "interno";
+
+export class ErrorVerificacion extends Error {
+  readonly codigo: CodigoErrorVerificacion;
+  readonly status: number;
+
+  constructor(codigo: CodigoErrorVerificacion, mensaje: string, status = 400) {
+    super(mensaje);
+    this.name = "ErrorVerificacion";
+    this.codigo = codigo;
+    this.status = status;
+  }
 }
 
-/** Longitud permitida de la cédula. Único lugar donde se define. */
-export const CEDULA_MIN_DIGITOS = 7;
-export const CEDULA_MAX_DIGITOS = 8;
+const MS_HORA = 60 * 60 * 1000;
 
-/** Límites del motivo y del nombre. Deben coincidir con los CHECK de SQL. */
-export const MOTIVO_MIN = 15;
-export const MOTIVO_MAX = 600;
-export const NOMBRE_MIN = 3;
-export const NOMBRE_MAX = 120;
+const secreto = secretoVerificacion;
 
-export function esCedulaValida(ci: string): boolean {
-  const valor = ci.trim();
-
-  return (
-    /^\d+$/.test(valor) &&
-    valor.length >= CEDULA_MIN_DIGITOS &&
-    valor.length <= CEDULA_MAX_DIGITOS
-  );
+function hashCodigo(correo: string, codigo: string): string {
+  return createHmac("sha256", secreto())
+    .update(`${correo}:${codigo}`)
+    .digest("hex");
 }
 
-export function normalizarTicket(ticket: string): string {
-  return ticket.trim().toUpperCase();
+function firmarToken(correo: string, ci: string): string {
+  const payload = {
+    c: correo,
+    i: ci,
+    e: Math.floor(Date.now() / 1000) +
+      CONFIG.duracionTokenVerificacionMinutos * 60,
+    n: randomUUID(),
+  };
+
+  const cuerpo = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const firma = createHmac("sha256", secreto())
+    .update(cuerpo)
+    .digest("base64url");
+
+  return `${cuerpo}.${firma}`;
 }
 
-export function esTicketValido(ticket: string): boolean {
-  return /^TK-\d{6}$/.test(normalizarTicket(ticket));
-}
+/** Verifica un token emitido tras validar el código. */
+export async function verificarTokenVerificacion(
+  token: string,
+): Promise<{ correo: string; ci: string } | null> {
+  const [cuerpo, firma] = token.split(".");
+  if (!cuerpo || !firma) return null;
 
-/** Dominio por defecto: así olvidar la variable de entorno no abre el registro. */
-const DOMINIO_INSTITUCIONAL = "est.ucab.edu.ve";
+  const esperada = createHmac("sha256", secreto())
+    .update(cuerpo)
+    .digest("base64url");
+  const recibidaBuffer = Buffer.from(firma);
+  const esperadaBuffer = Buffer.from(esperada);
+
+  if (
+    recibidaBuffer.length !== esperadaBuffer.length ||
+    !timingSafeEqual(recibidaBuffer, esperadaBuffer)
+  ) {
+    return null;
+  }
+
+  try {
+    const payload: unknown = JSON.parse(
+      Buffer.from(cuerpo, "base64url").toString("utf8"),
+    );
+
+    if (
+      typeof payload !== "object" ||
+      payload === null ||
+      typeof (payload as { c?: unknown }).c !== "string" ||
+      typeof (payload as { i?: unknown }).i !== "string" ||
+      typeof (payload as { e?: unknown }).e !== "number"
+    ) {
+      return null;
+    }
+
+    const { c, i, e } = payload as { c: string; i: string; e: number };
+    if (e < Math.floor(Date.now() / 1000)) return null;
+
+    return { correo: c, ci: i };
+  } catch {
+    return null;
+  }
+}
 
 /**
- * Dominios institucionales permitidos. Por defecto solo `est.ucab.edu.ve`.
- * Se puede sustituir con NEXT_PUBLIC_DOMINIOS_CORREO (separados por coma, sin
- * @) o desactivar la restricción con "*" (solo para pruebas). Se lee igual en
- * cliente y servidor; el servidor es quien manda.
+ * Genera un código, aplica límites por correo e IP y lo envía.
+ * En desarrollo, si Resend no está configurado, devuelve `codigoDemo`.
  */
-export function dominiosPermitidos(): string[] {
-  const configurado = process.env.NEXT_PUBLIC_DOMINIOS_CORREO?.trim();
-  if (configurado === "*") return [];
+export async function solicitarCodigo(
+  correo: string,
+  ipHash: string,
+): Promise<{ expiraEn: string; codigoDemo?: string }> {
+  if (!esCorreoInstitucional(correo)) {
+    throw new ErrorVerificacion(
+      "validacion",
+      mensajeCorreoInstitucional,
+      422,
+    );
+  }
 
-  return (configurado || DOMINIO_INSTITUCIONAL)
-    .split(",")
-    .map((dominio) => dominio.trim().toLowerCase().replace(/^@+/, ""))
-    .filter(Boolean);
+  const supabase = obtenerSupabaseAdmin();
+  const desdeHora = new Date(Date.now() - MS_HORA).toISOString();
+
+  const { count: porCorreo, error: errorConteo } = await supabase
+    .from("codigos_verificacion")
+    .select("id", { count: "exact", head: true })
+    .eq("correo", correo)
+    .gte("creado_en", desdeHora);
+
+  if (errorConteo) {
+    console.error("[verificacion] conteo por correo falló.", errorConteo);
+    throw new ErrorVerificacion(
+      "interno",
+      "No pudimos procesar la solicitud.",
+      500,
+    );
+  }
+
+  if ((porCorreo ?? 0) >= CONFIG.maxSolicitudesCodigoPorHora) {
+    throw new ErrorVerificacion(
+      "limite",
+      "Solicitaste demasiados códigos. Espera una hora antes de intentarlo de nuevo.",
+      429,
+    );
+  }
+
+  const { data: ultimo, error: errorUltimo } = await supabase
+    .from("codigos_verificacion")
+    .select("creado_en")
+    .eq("correo", correo)
+    .order("creado_en", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (errorUltimo) {
+    console.error("[verificacion] última solicitud falló.", errorUltimo);
+    throw new ErrorVerificacion(
+      "interno",
+      "No pudimos procesar la solicitud.",
+      500,
+    );
+  }
+
+  if (ultimo) {
+    const transcurrido = Date.now() - Date.parse(ultimo.creado_en);
+    const espera = CONFIG.segundosEntreSolicitudes * 1000 - transcurrido;
+
+    if (espera > 0) {
+      throw new ErrorVerificacion(
+        "limite",
+        `Espera ${Math.ceil(espera / 1000)} segundos antes de pedir otro código.`,
+        429,
+      );
+    }
+  }
+
+  const { count: porIp, error: errorIp } = await supabase
+    .from("codigos_verificacion")
+    .select("id", { count: "exact", head: true })
+    .eq("ip_hash", ipHash)
+    .gte("creado_en", desdeHora);
+
+  if (errorIp) {
+    console.error("[verificacion] conteo por IP falló.", errorIp);
+    throw new ErrorVerificacion(
+      "interno",
+      "No pudimos procesar la solicitud.",
+      500,
+    );
+  }
+
+  if ((porIp ?? 0) >= CONFIG.maxSolicitudesCodigoPorIpHora) {
+    throw new ErrorVerificacion(
+      "limite",
+      "Demasiadas solicitudes desde tu conexión. Intenta más tarde.",
+      429,
+    );
+  }
+
+  const codigo = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  const expiraEn = new Date(
+    Date.now() + CONFIG.duracionCodigoVerificacionMinutos * 60 * 1000,
+  ).toISOString();
+
+  const { data: fila, error: errorInsert } = await supabase
+    .from("codigos_verificacion")
+    .insert({
+      correo,
+      codigo_hash: hashCodigo(correo, codigo),
+      expira_en: expiraEn,
+      ip_hash: ipHash,
+    })
+    .select("id")
+    .single();
+
+  if (errorInsert || !fila) {
+    console.error("[verificacion] no se pudo guardar el código.", errorInsert);
+    throw new ErrorVerificacion(
+      "interno",
+      "No pudimos generar el código.",
+      500,
+    );
+  }
+
+  let enviado = false;
+
+  try {
+    const resultado = await enviarCodigoVerificacion(
+      correo,
+      codigo,
+      CONFIG.duracionCodigoVerificacionMinutos,
+    );
+    enviado = resultado.enviado;
+  } catch (error) {
+    console.error("[verificacion] envío de correo falló.", error);
+    await supabase.from("codigos_verificacion").delete().eq("id", fila.id);
+
+    throw new ErrorVerificacion(
+      "interno",
+      "No pudimos enviar el correo de verificación. Intenta más tarde.",
+      502,
+    );
+  }
+
+  const esDesarrollo = process.env.NODE_ENV !== "production";
+
+  if (!enviado && !esDesarrollo) {
+    await supabase.from("codigos_verificacion").delete().eq("id", fila.id);
+    throw new ErrorVerificacion(
+      "interno",
+      "El envío de correo no está configurado.",
+      503,
+    );
+  }
+
+  const mostrarDemo =
+    !enviado &&
+    esDesarrollo &&
+    process.env.MOSTRAR_CODIGO_DEMO !== "false";
+
+  if (mostrarDemo) {
+    console.info(`[verificacion:dev] Código para ${correo}: ${codigo}`);
+  }
+
+  return {
+    expiraEn,
+    ...(mostrarDemo ? { codigoDemo: codigo } : {}),
+  };
 }
 
-export function esCorreoInstitucional(correo: string): boolean {
-  const dominios = dominiosPermitidos();
-  if (dominios.length === 0) return true;
+/** Valida el código y devuelve un token firmado de corta duración. */
+export async function validarCodigo(
+  correo: string,
+  codigo: string,
+  ci: string,
+): Promise<{ token: string }> {
+  if (!esCedulaValida(ci)) {
+    throw new ErrorVerificacion(
+      "validacion",
+      "Ingresa una cédula válida antes de verificar el correo.",
+      422,
+    );
+  }
 
-  const dominio = correo.trim().toLowerCase().split("@")[1] ?? "";
-  return dominios.some((permitido) => dominio === permitido);
-}
+  if (!/^\d{6}$/.test(codigo)) {
+    throw new ErrorVerificacion(
+      "validacion",
+      "El código debe tener exactamente 6 dígitos.",
+    );
+  }
 
-export function mensajeCorreoInstitucional(): string {
-  const dominios = dominiosPermitidos();
-  return dominios.length > 0
-    ? `Usa tu correo institucional (${dominios.map((d) => `@${d}`).join(", ")}).`
-    : "Ingresa un correo electrónico válido.";
-}
+  const supabase = obtenerSupabaseAdmin();
 
-/** Oculta la parte local: ana.martinez@uni.edu.ve → a***@uni.edu.ve */
-export function enmascararCorreo(correo: string): string {
-  const [local = "", dominio = ""] = correo.split("@");
-  return `${local.slice(0, 1)}***@${dominio}`;
+  const { data: fila, error } = await supabase
+    .from("codigos_verificacion")
+    .select("id, codigo_hash, expira_en, intentos, consumido_en")
+    .eq("correo", correo)
+    .is("consumido_en", null)
+    .order("creado_en", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[verificacion] consulta de código falló.", error);
+    throw new ErrorVerificacion(
+      "interno",
+      "No pudimos validar el código.",
+      500,
+    );
+  }
+
+  if (!fila) {
+    throw new ErrorVerificacion(
+      "expirado",
+      "El código expiró o no existe. Solicita uno nuevo.",
+    );
+  }
+
+  if (Date.parse(fila.expira_en) < Date.now()) {
+    throw new ErrorVerificacion(
+      "expirado",
+      "El código expiró. Solicita uno nuevo.",
+    );
+  }
+
+  if (fila.intentos >= CONFIG.maxIntentosCodigo) {
+    throw new ErrorVerificacion(
+      "limite",
+      "Demasiados intentos con este código. Solicita uno nuevo.",
+      429,
+    );
+  }
+
+  // El intento se cuenta ANTES de comparar y de forma atómica en Postgres:
+  // peticiones paralelas no pueden adivinar más de `maxIntentosCodigo` veces.
+  const { data: intentos, error: errorIntento } = await supabase.rpc(
+    "registrar_intento_codigo",
+    { p_id: fila.id },
+  );
+
+  if (errorIntento || typeof intentos !== "number") {
+    console.error("[verificacion] no se pudo contar el intento.", errorIntento);
+    throw new ErrorVerificacion(
+      "interno",
+      "No pudimos validar el código.",
+      500,
+    );
+  }
+
+  if (intentos > CONFIG.maxIntentosCodigo) {
+    throw new ErrorVerificacion(
+      "limite",
+      "Demasiados intentos con este código. Solicita uno nuevo.",
+      429,
+    );
+  }
+
+  const esperado = Buffer.from(fila.codigo_hash, "hex");
+  const recibido = Buffer.from(hashCodigo(correo, codigo), "hex");
+
+  if (
+    esperado.length !== recibido.length ||
+    !timingSafeEqual(esperado, recibido)
+  ) {
+    throw new ErrorVerificacion(
+      "codigo",
+      "El código no coincide. Revisa los 6 dígitos e intenta de nuevo.",
+    );
+  }
+
+  // Consumo atómico: un código solo puede canjearse una vez.
+  const { data: consumido, error: errorConsumo } = await supabase.rpc(
+    "consumir_codigo",
+    { p_id: fila.id },
+  );
+
+  if (errorConsumo) {
+    console.error("[verificacion] no se pudo consumir el código.", errorConsumo);
+    throw new ErrorVerificacion(
+      "interno",
+      "No pudimos completar la verificación.",
+      500,
+    );
+  }
+
+  if (consumido !== true) {
+    throw new ErrorVerificacion(
+      "expirado",
+      "El código ya fue usado o expiró. Solicita uno nuevo.",
+    );
+  }
+
+  return { token: firmarToken(correo, ci) };
 }

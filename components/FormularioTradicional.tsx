@@ -150,7 +150,7 @@ export function FormularioTradicional({
     if (!esCorreoValido(correo)) {
       nuevosErrores.correo = "Ingresa un correo electrónico válido.";
     } else if (!esCorreoInstitucional(correo)) {
-      nuevosErrores.correo = mensajeCorreoInstitucional();
+      nuevosErrores.correo = mensajeCorreoInstitucional;
     } else if (verificacion?.correo !== correo || verificacion.ci !== ci) {
       nuevosErrores.correo = "Verifica tu correo antes de enviar el reporte.";
     }
@@ -358,7 +358,7 @@ export function FormularioTradicional({
               name="correo"
               type="email"
               autoComplete="email"
-              placeholder="nombre@est.ucab.edu.ve"
+              placeholder="nombre@correo-institucional.edu.ve"
               value={formulario.correo}
               onChange={(event) => actualizarCorreo(event.target.value)}
               required

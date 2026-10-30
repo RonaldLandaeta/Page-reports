@@ -9,6 +9,7 @@ import { FormularioTradicional } from "@/components/FormularioTradicional";
 import { ReporteTabs, type TabKey } from "@/components/ReporteTabs";
 import { ResumenReportes } from "@/components/ResumenReportes";
 import { ArrowRightIcon, ClockIcon } from "@/components/icons";
+import { CONFIG } from "@/lib/config";
 import type { Materia } from "@/lib/types";
 
 export function ReportarView({ materias }: { materias: Materia[] }) {
@@ -42,7 +43,11 @@ export function ReportarView({ materias }: { materias: Materia[] }) {
 
       <ReporteTabs active={tabActiva} onChange={setTabActiva} />
 
-      <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+      <div
+        className={`mt-5 grid gap-6 lg:items-start ${
+          CONFIG.mostrarConsola ? "lg:grid-cols-[minmax(0,1fr)_20rem]" : ""
+        }`}
+      >
         <div className="min-w-0">
           <div
             role="tabpanel"
@@ -66,10 +71,12 @@ export function ReportarView({ materias }: { materias: Materia[] }) {
           </div>
         </div>
 
-        <div className="space-y-6">
-          <ResumenReportes />
-          <ConsolaJson />
-        </div>
+        {CONFIG.mostrarConsola && (
+          <div className="space-y-6">
+            <ResumenReportes />
+            <ConsolaJson />
+          </div>
+        )}
       </div>
     </div>
   );

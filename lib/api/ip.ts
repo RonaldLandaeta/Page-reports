@@ -2,21 +2,26 @@ import "server-only";
 
 import { createHmac } from "node:crypto";
 
+import { secretoVerificacion } from "@/lib/secreto";
+
 /**
- * IP del cliente detrás de Vercel/Cloudflare. Se guarda siempre hasheada.
+ * IP del cliente. Se prefieren las cabeceras que fija la plataforma
+ * (Cloudflare, Vercel) porque `x-forwarded-for` puede venir falsificada si la
+ * app corre sin proxy de confianza. Se guarda siempre hasheada.
  */
 export function ipDelCliente(request: Request): string {
-  const reenviada = request.headers.get("x-forwarded-for");
-  const ip =
-    reenviada?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip")?.trim() ||
-    "local";
+  const cabecera = (nombre: string) =>
+    request.headers.get(nombre)?.split(",")[0]?.trim() || null;
 
-  return ip;
+  return (
+    cabecera("cf-connecting-ip") ??
+    cabecera("x-vercel-forwarded-for") ??
+    cabecera("x-real-ip") ??
+    cabecera("x-forwarded-for") ??
+    "local"
+  );
 }
 
 export function hashIp(ip: string): string {
-  const secreto =
-    process.env.VERIFICACION_SECRET ?? "desarrollo-ip-hash-no-produccion";
-  return createHmac("sha256", secreto).update(ip).digest("hex");
+  return createHmac("sha256", secretoVerificacion()).update(ip).digest("hex");
 }

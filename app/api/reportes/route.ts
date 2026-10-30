@@ -11,16 +11,19 @@ import type { ReporteInput } from "@/lib/types";
 import {
   CEDULA_MAX_DIGITOS,
   CEDULA_MIN_DIGITOS,
+  MOTIVO_MAX,
+  MOTIVO_MIN,
+  NOMBRE_MAX,
+  NOMBRE_MIN,
   esCedulaValida,
+  esCorreoInstitucional,
   esCorreoValido,
+  mensajeCorreoInstitucional,
 } from "@/lib/validaciones";
 import { verificarTokenVerificacion } from "@/lib/verificacion-servidor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const MOTIVO_MINIMO = 15;
-const MOTIVO_MAXIMO = 600;
 
 export async function POST(request: Request) {
   const cuerpo = await leerCuerpo(request);
@@ -43,12 +46,14 @@ export async function POST(request: Request) {
     campos.ci = `La cédula debe tener entre ${CEDULA_MIN_DIGITOS} y ${CEDULA_MAX_DIGITOS} dígitos.`;
   }
 
-  if (nombre.length < 3 || nombre.length > 120) {
-    campos.nombre = "Ingresa tu nombre completo (entre 3 y 120 caracteres).";
+  if (nombre.length < NOMBRE_MIN || nombre.length > NOMBRE_MAX) {
+    campos.nombre = `Ingresa tu nombre completo (entre ${NOMBRE_MIN} y ${NOMBRE_MAX} caracteres).`;
   }
 
   if (!esCorreoValido(correo)) {
     campos.correo = "Ingresa un correo electrónico válido.";
+  } else if (!esCorreoInstitucional(correo)) {
+    campos.correo = mensajeCorreoInstitucional;
   }
 
   if (!/^\d{3,10}$/.test(nrc)) {
@@ -59,8 +64,8 @@ export async function POST(request: Request) {
     campos.tipo_error = "Selecciona el tipo de error.";
   }
 
-  if (motivo.length < MOTIVO_MINIMO || motivo.length > MOTIVO_MAXIMO) {
-    campos.motivo = `Describe el problema entre ${MOTIVO_MINIMO} y ${MOTIVO_MAXIMO} caracteres.`;
+  if (motivo.length < MOTIVO_MIN || motivo.length > MOTIVO_MAX) {
+    campos.motivo = `Describe el problema entre ${MOTIVO_MIN} y ${MOTIVO_MAX} caracteres.`;
   }
 
   if (Object.keys(campos).length > 0) {
@@ -72,10 +77,10 @@ export async function POST(request: Request) {
     );
   }
 
-  let sesion: { correo: string } | null = null;
+  let sesion: { correo: string; ci: string } | null = null;
 
   try {
-    sesion = verificarTokenVerificacion(token);
+    sesion = await verificarTokenVerificacion(token);
   } catch (error) {
     console.error("[api/reportes] token no verificable.", error);
     return respuestaError(
@@ -85,7 +90,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!sesion || sesion.correo !== correo) {
+  if (!sesion || sesion.correo !== correo || sesion.ci !== ci) {
     return respuestaError(
       "verificacion",
       "Verifica tu correo antes de enviar el reporte.",

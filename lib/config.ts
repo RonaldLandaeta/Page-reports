@@ -13,15 +13,22 @@ export const CONFIG = {
   maxSolicitudesCodigoPorIpHora: 20,
   /** Intentos permitidos para acertar un mismo código. */
   maxIntentosCodigo: 5,
+  /** Consultas fallidas (ticket + cédula) permitidas por IP en la ventana. */
+  maxConsultasFallidasPorIp: 10,
+  ventanaConsultasMinutos: 15,
   /**
    * Zona horaria que define el "día calendario" del límite diario.
    * Es fija para que el corte sea el mismo en el navegador y en el servidor
    * (Vercel corre en UTC).
    */
-  zonaHoraria: "America/Guayaquil",
+  zonaHoraria: "America/Caracas",
   /**
    * Muestra la consola JSON. Es un panel de desarrollo: expone cédula y
-   * motivo en pantalla. Apágalo con NEXT_PUBLIC_MOSTRAR_CONSOLA=false.
+   * motivo en pantalla. En producción queda apagada salvo que se active
+   * explícitamente con NEXT_PUBLIC_MOSTRAR_CONSOLA=true.
    */
-  mostrarConsola: process.env.NEXT_PUBLIC_MOSTRAR_CONSOLA !== "false",
+  mostrarConsola:
+    process.env.NEXT_PUBLIC_MOSTRAR_CONSOLA === "true" ||
+    (process.env.NEXT_PUBLIC_MOSTRAR_CONSOLA === undefined &&
+      process.env.NODE_ENV !== "production"),
 } as const;

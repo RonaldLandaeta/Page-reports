@@ -6,7 +6,7 @@ import { CONFIG } from "@/lib/config";
 
 import { ClockIcon, InboxIcon } from "./icons";
 
-const formatoHora = new Intl.DateTimeFormat("es-EC", {
+const formatoHora = new Intl.DateTimeFormat("es-VE", {
   hour: "2-digit",
   minute: "2-digit",
 });

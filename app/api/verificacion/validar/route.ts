@@ -14,6 +14,7 @@ export async function POST(request: Request) {
   const cuerpo = await leerCuerpo(request);
   const correo = texto(cuerpo, "correo").toLowerCase();
   const codigo = texto(cuerpo, "codigo");
+  const ci = texto(cuerpo, "ci");
 
   if (!esCorreoValido(correo)) {
     return respuestaError(
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const resultado = await validarCodigo(correo, codigo);
+    const resultado = await validarCodigo(correo, codigo, ci);
     return respuestaOk(resultado);
   } catch (error) {
     if (error instanceof ErrorVerificacion) {

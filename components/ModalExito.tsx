@@ -23,13 +23,16 @@ interface ModalExitoProps {
 export function ModalExito({ reporte, onClose }: ModalExitoProps) {
   const [copiado, setCopiado] = useState(false);
   const cerrarRef = useRef<HTMLButtonElement>(null);
+  // Ref para que un onClose nuevo en cada render no reinicie foco ni scroll.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     cerrarRef.current?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        onClose();
+        onCloseRef.current();
       }
     }
 
@@ -41,7 +44,7 @@ export function ModalExito({ reporte, onClose }: ModalExitoProps) {
       document.body.style.overflow = overflowPrevio;
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [onClose]);
+  }, []);
 
   useEffect(() => {
     if (!copiado) return;

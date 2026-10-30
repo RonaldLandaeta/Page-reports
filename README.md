@@ -94,7 +94,7 @@ Completa:
 | `GMAIL_USER`                    | Tu correo de Gmail (opcional)                   |
 | `GMAIL_APP_PASSWORD`            | Contraseña de aplicación de Google (opcional)   |
 | `EMAIL_FROM`                    | Remitente; vacío usa el proveedor configurado   |
-| `NEXT_PUBLIC_DOMINIOS_CORREO`   | Dominios permitidos (coma). Por defecto `est.ucab.edu.ve`; `*` = sin restricción |
+| `NEXT_PUBLIC_DOMINIOS_CORREO`   | Dominios institucionales permitidos (coma)      |
 
 `SUPABASE_SERVICE_ROLE_KEY` y `VERIFICACION_SECRET` **no** deben llevar el
 prefijo `NEXT_PUBLIC_` ni subirse al repositorio.
