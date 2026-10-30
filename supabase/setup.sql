@@ -1,4 +1,4 @@
--- Reporte de Horarios · setup completo (0001 + 0002 + 0003 + catálogo inicial).
+-- Reporte de Horarios · setup completo (0001 + 0002 + 0003 + 0004 + catálogo inicial).
 -- Supabase → SQL Editor → pega TODO el contenido (no la ruta) y pulsa Run.
 
 -- ============================================================================
@@ -175,7 +175,7 @@ as $$
 declare
   c_ventana_horas constant int := 24;
   c_max_por_dia   constant int := 5;
-  c_zona          constant text := 'America/Guayaquil';
+  c_zona          constant text := 'America/Caracas';
 
   v_materia   public.materias%rowtype;
   v_duplicado public.reportes%rowtype;
@@ -385,6 +385,11 @@ as $$
    where creado_en < now() - interval '2 days';
 $$;
 
+-- `create or replace` conserva los permisos, pero se repiten para que la
+-- migración sea explícita y segura si algún día se recrea la función.
+revoke all on function public.limpiar_codigos_vencidos() from PUBLIC, anon, authenticated;
+grant execute on function public.limpiar_codigos_vencidos() to service_role;
+
 -- ----------------------------------------------------------------------------
 -- registrar_reporte con zona horaria de Venezuela (resto idéntico a 0001).
 -- ----------------------------------------------------------------------------
@@ -568,6 +573,26 @@ revoke all on function public.cambiar_estado_reporte(uuid, text, text)
   from PUBLIC, anon, authenticated;
 grant execute on function public.cambiar_estado_reporte(uuid, text, text)
   to service_role;
+
+notify pgrst, 'reload schema';
+
+-- ============================================================================
+-- Reporte de Horarios · migración 0004: permisos de la Data API
+--
+-- Supabase suele conceder estos permisos automáticamente cuando la opción
+-- "Expose new tables automatically" está activa. Se declaran aquí para que el
+-- proyecto funcione aunque esa opción esté desactivada.
+-- ============================================================================
+
+grant usage on schema public to service_role;
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;
+
+-- Las tablas/sequences que se creen en el futuro también quedan cubiertas.
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to service_role;
+alter default privileges in schema public
+  grant usage, select on sequences to service_role;
 
 notify pgrst, 'reload schema';
 

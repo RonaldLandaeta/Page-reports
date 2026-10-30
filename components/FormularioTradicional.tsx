@@ -74,8 +74,10 @@ function ErrorCampo({ id, mensaje }: { id: string; mensaje?: string }) {
 
 export function FormularioTradicional({
   materias,
+  errorCatalogo,
 }: {
   materias: Materia[];
+  errorCatalogo: string | null;
 }) {
   const { registrarReporte } = useReportes();
 
@@ -272,8 +274,8 @@ export function FormularioTradicional({
             >
               <AlertIcon className="mt-0.5 size-4 shrink-0" />
               <p>
-                No se pudo cargar el catálogo de materias. Intenta de nuevo en
-                unos minutos; si el problema continúa, avisa al administrador.
+                {errorCatalogo ??
+                  "El catálogo de materias está vacío. Avisa al administrador para que cargue las materias antes de reportar."}
               </p>
             </div>
           )}

@@ -46,6 +46,24 @@ function hashCodigo(correo: string, codigo: string): string {
     .digest("hex");
 }
 
+/**
+ * Si el correo no se pudo enviar, el código insertado no debe contar para el
+ * límite por hora. Si el borrado falla, se registra para poder detectarlo.
+ */
+async function borrarCodigoNoEnviado(
+  supabase: ReturnType<typeof obtenerSupabaseAdmin>,
+  id: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("codigos_verificacion")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error("[verificacion] no se pudo borrar el código no enviado.", error);
+  }
+}
+
 function firmarToken(correo: string, ci: string): string {
   const payload = {
     c: correo,
@@ -238,7 +256,7 @@ export async function solicitarCodigo(
     enviado = resultado.enviado;
   } catch (error) {
     console.error("[verificacion] envío de correo falló.", error);
-    await supabase.from("codigos_verificacion").delete().eq("id", fila.id);
+    await borrarCodigoNoEnviado(supabase, fila.id);
 
     throw new ErrorVerificacion(
       "interno",
@@ -250,7 +268,7 @@ export async function solicitarCodigo(
   const esDesarrollo = process.env.NODE_ENV !== "production";
 
   if (!enviado && !esDesarrollo) {
-    await supabase.from("codigos_verificacion").delete().eq("id", fila.id);
+    await borrarCodigoNoEnviado(supabase, fila.id);
     throw new ErrorVerificacion(
       "interno",
       "El envío de correo no está configurado.",
@@ -343,8 +361,26 @@ export async function validarCodigo(
     { p_id: fila.id },
   );
 
-  if (errorIntento || typeof intentos !== "number") {
+  if (errorIntento) {
     console.error("[verificacion] no se pudo contar el intento.", errorIntento);
+    throw new ErrorVerificacion(
+      "interno",
+      "No pudimos validar el código.",
+      500,
+    );
+  }
+
+  // `registrar_intento_codigo` devuelve null cuando el código ya fue consumido
+  // (o canjeado en paralelo). Para el usuario eso es un código expirado.
+  if (intentos === null) {
+    throw new ErrorVerificacion(
+      "expirado",
+      "El código ya fue usado o expiró. Solicita uno nuevo.",
+    );
+  }
+
+  if (typeof intentos !== "number") {
+    console.error("[verificacion] respuesta inesperada al contar el intento.", intentos);
     throw new ErrorVerificacion(
       "interno",
       "No pudimos validar el código.",

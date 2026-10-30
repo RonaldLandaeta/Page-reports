@@ -172,7 +172,7 @@ as $$
 declare
   c_ventana_horas constant int := 24;
   c_max_por_dia   constant int := 5;
-  c_zona          constant text := 'America/Guayaquil';
+  c_zona          constant text := 'America/Caracas';
 
   v_materia   public.materias%rowtype;
   v_duplicado public.reportes%rowtype;

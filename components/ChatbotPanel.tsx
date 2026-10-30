@@ -664,10 +664,15 @@ function Compositor({
 
 interface ChatbotPanelProps {
   materias: Materia[];
+  errorCatalogo: string | null;
   onIrAFormulario: () => void;
 }
 
-export function ChatbotPanel({ materias, onIrAFormulario }: ChatbotPanelProps) {
+export function ChatbotPanel({
+  materias,
+  errorCatalogo,
+  onIrAFormulario,
+}: ChatbotPanelProps) {
   const { registrarReporte } = useReportes();
 
   const [mensajes, setMensajes] = useState<Mensaje[]>(MENSAJES_INICIALES);
@@ -820,8 +825,8 @@ export function ChatbotPanel({ materias, onIrAFormulario }: ChatbotPanelProps) {
           role="alert"
           className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-800 sm:px-6"
         >
-          No se pudo cargar el catálogo de materias, así que el asistente no
-          puede registrar reportes ahora.
+          {errorCatalogo ??
+            "El catálogo de materias está vacío, así que el asistente no puede registrar reportes ahora."}
         </p>
       )}
 

@@ -6,7 +6,10 @@ import {
 } from "@/lib/api/respuestas";
 import { esTipoError } from "@/lib/catalogos";
 import { enviarConfirmacionReporte } from "@/lib/email";
-import { crearReporteEnDb } from "@/lib/supabase/reportes";
+import {
+  crearReporteEnDb,
+  type ResultadoCreacion,
+} from "@/lib/supabase/reportes";
 import type { ReporteInput } from "@/lib/types";
 import {
   CEDULA_MAX_DIGITOS,
@@ -107,7 +110,19 @@ export async function POST(request: Request) {
     motivo,
   };
 
-  const resultado = await crearReporteEnDb(input);
+  let resultado: ResultadoCreacion;
+
+  try {
+    resultado = await crearReporteEnDb(input);
+  } catch (error) {
+    // Puede fallar antes de llegar a Supabase (cliente sin configurar) o por red.
+    console.error("[api/reportes] no se pudo crear el reporte.", error);
+    return respuestaError(
+      "interno",
+      "No pudimos registrar el reporte. Intenta nuevamente.",
+      500,
+    );
+  }
 
   if (!resultado.ok) {
     const status =

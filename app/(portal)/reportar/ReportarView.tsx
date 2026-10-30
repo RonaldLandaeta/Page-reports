@@ -12,7 +12,13 @@ import { ArrowRightIcon, ClockIcon } from "@/components/icons";
 import { CONFIG } from "@/lib/config";
 import type { Materia } from "@/lib/types";
 
-export function ReportarView({ materias }: { materias: Materia[] }) {
+export function ReportarView({
+  materias,
+  errorCatalogo,
+}: {
+  materias: Materia[];
+  errorCatalogo: string | null;
+}) {
   const [tabActiva, setTabActiva] = useState<TabKey>("formulario");
 
   return (
@@ -55,7 +61,10 @@ export function ReportarView({ materias }: { materias: Materia[] }) {
             aria-labelledby="tab-formulario"
             hidden={tabActiva !== "formulario"}
           >
-            <FormularioTradicional materias={materias} />
+            <FormularioTradicional
+              materias={materias}
+              errorCatalogo={errorCatalogo}
+            />
           </div>
 
           <div
@@ -66,6 +75,7 @@ export function ReportarView({ materias }: { materias: Materia[] }) {
           >
             <ChatbotPanel
               materias={materias}
+              errorCatalogo={errorCatalogo}
               onIrAFormulario={() => setTabActiva("formulario")}
             />
           </div>

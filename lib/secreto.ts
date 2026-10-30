@@ -5,7 +5,7 @@ import "server-only";
  * obligatorio (mínimo 32 caracteres); en desarrollo hay un valor de respaldo.
  */
 export function secretoVerificacion(): string {
-  const valor = process.env.VERIFICACION_SECRET;
+  const valor = (process.env.VERIFICACION_SECRET ?? "").trim();
 
   if (valor && valor.length >= 32) return valor;
 

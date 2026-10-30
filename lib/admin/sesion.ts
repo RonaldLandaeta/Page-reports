@@ -3,7 +3,12 @@ import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import type { NextResponse } from "next/server";
 
-import { obtenerSupabaseAdmin } from "@/lib/supabase/admin";
+import {
+  claveAnonima,
+  fetchConTimeout,
+  obtenerSupabaseAdmin,
+  urlSupabase,
+} from "@/lib/supabase/admin";
 
 export const COOKIE_ADMIN = "admin_token";
 
@@ -45,20 +50,17 @@ export async function autenticarAdmin(
   correo: string,
   clave: string,
 ): Promise<SesionAdmin | null> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !anon) {
-    throw new Error(
-      "Falta NEXT_PUBLIC_SUPABASE_URL o NEXT_PUBLIC_SUPABASE_ANON_KEY.",
-    );
-  }
+  const url = urlSupabase();
+  const anon = claveAnonima();
 
   const clienteAuth = createClient(url, anon, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
       detectSessionInUrl: false,
+    },
+    global: {
+      fetch: fetchConTimeout,
     },
   });
 

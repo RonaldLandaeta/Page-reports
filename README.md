@@ -66,7 +66,9 @@ En el dashboard de Supabase → **SQL Editor**, ejecuta en este orden:
    límite de consultas fallidas y zona horaria de Venezuela.
 3. `supabase/migrations/0003_admin.sql` — tabla `administradores` y función
    para cambiar estados (panel `/admin`).
-4. `supabase/seed.sql` — catálogo inicial de materias.
+4. `supabase/migrations/0004_permisos.sql` — permisos explícitos de la Data API
+   para `service_role`.
+5. `supabase/seed.sql` — catálogo inicial de materias.
 
 (`supabase/setup.sql` ya trae todo junto para pegar de una vez.)
 
@@ -76,6 +78,15 @@ También puedes usar la CLI:
 supabase link --project-ref <ref>
 supabase db push
 ```
+
+> **Importante:** `supabase db push` aplica las migraciones, pero **no ejecuta**
+> `supabase/seed.sql`. Después de `db push`, pega el contenido de `seed.sql` en
+> el SQL Editor (o usa `supabase db reset` en local, que sí corre el seed).
+> Si la tabla `materias` queda vacía, `/reportar` no podrá seleccionar materias.
+
+El archivo `supabase/config.toml` ya está incluido para el entorno local
+(`supabase start`). Ajusta `db.major_version` si tu proyecto remoto usa otra
+versión de Postgres.
 
 ### 2. Variables de entorno
 
@@ -97,8 +108,16 @@ Completa:
 | `EMAIL_FROM`                    | Remitente; vacío usa el proveedor configurado   |
 | `NEXT_PUBLIC_DOMINIOS_CORREO`   | Dominios institucionales permitidos (coma)      |
 
+Opcional: en el servidor puedes usar `SUPABASE_URL` en lugar de
+`NEXT_PUBLIC_SUPABASE_URL`. La app limpia espacios/saltos de línea y valida que
+la URL sea solo el origen (`https://<ref>.supabase.co`, sin `/rest/v1`). También
+rechaza una `SUPABASE_SERVICE_ROLE_KEY` que sea en realidad la clave anon.
+
 `SUPABASE_SERVICE_ROLE_KEY` y `VERIFICACION_SECRET` **no** deben llevar el
 prefijo `NEXT_PUBLIC_` ni subirse al repositorio.
+
+Después de cambiar variables en Vercel hay que **volver a desplegar**: las
+variables `NEXT_PUBLIC_*` se fijan en tiempo de build.
 
 ### 3. Correo
 
@@ -160,7 +179,7 @@ npm run typecheck
 2. Autorízalo (SQL Editor):
    `insert into public.administradores (user_id) select id from auth.users where email = 'tu-admin@dominio';`
 3. Entra en `/admin/login`. La sesión dura lo que el JWT de Supabase (1 h por
-   defecto); después pide login de nuevo. Cookie `httpOnly` + `SameSite=Strict`.
+   defecto); después pide login de nuevo. Cookie `httpOnly` + `SameSite=Lax`.
 4. Filtra por estado, busca por ticket/cédula/NRC y cambia el estado con una
    nota opcional (queda en `reporte_eventos`).
 
@@ -173,6 +192,7 @@ npm run typecheck
 | `POST` | `/api/reportes`               | Crea el reporte (exige token de verificación).   |
 | `POST` | `/api/reportes/consultar`     | Consulta por ticket + cédula (POST evita la CI en logs/URL). |
 | `GET`  | `/api/materias?q=`            | Catálogo activo, con búsqueda opcional.          |
+| `GET`  | `/api/salud`                  | Diagnóstico: variables, Supabase y materias.     |
 
 Contrato de error:
 
@@ -188,6 +208,62 @@ Contrato de error:
 Códigos: `validacion`, `verificacion`, `duplicado`, `limite`, `materia`,
 `no_encontrado`, `interno`.
 
+### Diagnóstico rápido
+
+`GET /api/salud` comprueba, sin exponer claves:
+
+- que `NEXT_PUBLIC_SUPABASE_URL` (o `SUPABASE_URL`) sea válida;
+- que `SUPABASE_SERVICE_ROLE_KEY` sea la clave `service_role`;
+- que exista `NEXT_PUBLIC_SUPABASE_ANON_KEY`;
+- que `VERIFICACION_SECRET` tenga al menos 32 caracteres;
+- que existan las tablas `materias`, `reportes`, `reporte_eventos`,
+  `codigos_verificacion`, `consulta_intentos` y `administradores`;
+- que la tabla `materias` responda y cuántas materias activas tiene.
+
+Si `ok` es `false`, el campo `mensaje` indica qué revisar. Los fallos de
+`/api/materias` también aparecen en los logs de Vercel con el prefijo
+`[materias]`.
+
+### Comprobaciones en Supabase
+
+Si `/api/salud` responde `ok: false` o `/api/materias` devuelve 503, revisa en
+el SQL Editor:
+
+```sql
+-- ¿Existen todas las tablas?
+select table_name
+from information_schema.tables
+where table_schema = 'public'
+order by table_name;
+
+-- ¿Hay catálogo activo?
+select count(*) as total, count(*) filter (where activo) as activas
+from public.materias;
+
+-- ¿Existen las funciones que usa la app?
+select proname
+from pg_proc
+where proname in (
+  'registrar_reporte',
+  'registrar_intento_codigo',
+  'consumir_codigo',
+  'cambiar_estado_reporte',
+  'limpiar_codigos_vencidos'
+)
+order by proname;
+
+-- ¿Qué versión de registrar_reporte está aplicada? (debe decir America/Caracas)
+select prosrc from pg_proc where proname = 'registrar_reporte';
+
+-- ¿Quedaron restricciones viejas?
+select conname, pg_get_constraintdef(oid)
+from pg_constraint
+where conrelid = 'public.reportes'::regclass;
+```
+
+Si falta alguna tabla o función, vuelve a ejecutar `supabase/setup.sql`
+completo. Es idempotente.
+
 ## Modelo de datos
 
 - `materias`: catálogo (`nrc` PK, nombre, docente, horario, aula, activo).
@@ -196,6 +272,8 @@ Códigos: `validacion`, `verificacion`, `duplicado`, `limite`, `materia`,
 - `reporte_eventos`: historial de cambios de estado.
 - `codigos_verificacion`: hash del código, expiración, intentos, consumo e IP
   hasheada.
+- `consulta_intentos`: consultas fallidas por IP (límite de fuerza bruta).
+- `administradores`: usuarios de Supabase Auth autorizados en `/admin`.
 
 RLS está activo en todas las tablas. Solo `materias` tiene lectura pública; el
 resto queda denegado para `anon` y `authenticated`. La API usa `service_role`.
@@ -208,6 +286,7 @@ app/
     materias/route.ts
     reportes/route.ts
     reportes/consultar/route.ts
+    salud/route.ts
     verificacion/solicitar/route.ts
     verificacion/validar/route.ts
   (portal)/
@@ -245,8 +324,13 @@ lib/
   types.ts
   validaciones.ts
 supabase/
+  config.toml
   migrations/0001_init.sql
+  migrations/0002_auditoria.sql
+  migrations/0003_admin.sql
+  migrations/0004_permisos.sql
   seed.sql
+  setup.sql
 data/
   materias.csv
 ```
@@ -254,6 +338,9 @@ data/
 ## Seguridad
 
 - `service_role` solo en servidor; RLS bloquea el acceso directo.
+- `0004_permisos.sql` concede a `service_role` los permisos de tabla y
+  secuencia que necesita la Data API, aunque la exposición automática esté
+  desactivada.
 - La función `registrar_reporte` es `security definer` y tiene `EXECUTE`
   revocado para `anon`/`authenticated`.
 - El token de verificación queda ligado a una cédula (una cédula puede tener

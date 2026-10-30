@@ -2,14 +2,138 @@ import "server-only";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+/** Evita que una petición quede colgada si Supabase no responde. */
+const TIMEOUT_MS = 8_000;
+
 let cliente: SupabaseClient | null = null;
 
-export function haySupabaseConfigurado(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-  );
+function variable(nombre: string): string {
+  return (process.env[nombre] ?? "").trim();
 }
+
+/**
+ * URL base del proyecto. Acepta `SUPABASE_URL` (servidor) o la variable
+ * pública, y corrige los errores más comunes: espacios, barra final o una URL
+ * pegada con `/rest/v1`.
+ */
+export function urlSupabase(): string {
+  const valor = variable("SUPABASE_URL") || variable("NEXT_PUBLIC_SUPABASE_URL");
+
+  if (!valor) {
+    throw new Error(
+      "Falta NEXT_PUBLIC_SUPABASE_URL (o SUPABASE_URL) en el entorno.",
+    );
+  }
+
+  let url: URL;
+
+  try {
+    url = new URL(valor);
+  } catch {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL no es una URL válida. Debe verse como https://<ref>.supabase.co.",
+    );
+  }
+
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL debe usar http o https.");
+  }
+
+  const ruta = url.pathname.replace(/\/+$/, "");
+
+  if (ruta && ruta !== "/rest/v1") {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL debe ser solo el origen (https://<ref>.supabase.co), sin ruta.",
+    );
+  }
+
+  return url.origin;
+}
+
+export function claveAnonima(): string {
+  const valor = variable("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+
+  if (!valor) {
+    throw new Error("Falta NEXT_PUBLIC_SUPABASE_ANON_KEY en el entorno.");
+  }
+
+  return valor;
+}
+
+/** Extrae el rol de una clave JWT clásica de Supabase, si lo tiene. */
+function rolDeClave(clave: string): string | null {
+  const partes = clave.split(".");
+  if (partes.length !== 3) return null;
+
+  try {
+    const payload: unknown = JSON.parse(
+      Buffer.from(partes[1], "base64url").toString("utf8"),
+    );
+
+    if (typeof payload !== "object" || payload === null) return null;
+
+    const rol = (payload as { role?: unknown }).role;
+    return typeof rol === "string" ? rol : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clave service_role. Se valida para no confundirla con la anon: con la anon,
+ * las tablas sin política de lectura fallan con "permission denied".
+ */
+export function claveServiceRole(): string {
+  const valor = variable("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!valor) {
+    throw new Error("Falta SUPABASE_SERVICE_ROLE_KEY en el entorno.");
+  }
+
+  const anon = variable("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+
+  if (anon && valor === anon) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY contiene la clave anon. Usa la clave service_role (o sb_secret_…).",
+    );
+  }
+
+  if (valor.startsWith("sb_publishable_")) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY contiene una clave publicable. Usa la clave secreta (service_role / sb_secret_…).",
+    );
+  }
+
+  const rol = rolDeClave(valor);
+
+  if (rol && rol !== "service_role") {
+    throw new Error(
+      `SUPABASE_SERVICE_ROLE_KEY tiene rol "${rol}", no "service_role". Revisa la clave en Vercel.`,
+    );
+  }
+
+  return valor;
+}
+
+export function haySupabaseConfigurado(): boolean {
+  try {
+    urlSupabase();
+    claveServiceRole();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** `fetch` con timeout para todas las llamadas a Supabase. */
+export const fetchConTimeout: typeof fetch = (input, init) => {
+  const timeout = AbortSignal.timeout(TIMEOUT_MS);
+  const signal = init?.signal
+    ? AbortSignal.any([init.signal, timeout])
+    : timeout;
+
+  return fetch(input, { ...init, signal });
+};
 
 /**
  * Cliente con la service_role. Salta RLS, así que solo puede importarse desde
@@ -18,16 +142,7 @@ export function haySupabaseConfigurado(): boolean {
 export function obtenerSupabaseAdmin(): SupabaseClient {
   if (cliente) return cliente;
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceRole) {
-    throw new Error(
-      "Supabase no está configurado. Define NEXT_PUBLIC_SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en .env.local.",
-    );
-  }
-
-  cliente = createClient(url, serviceRole, {
+  cliente = createClient(urlSupabase(), claveServiceRole(), {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -35,6 +150,7 @@ export function obtenerSupabaseAdmin(): SupabaseClient {
     },
     global: {
       headers: { "x-application-name": "page-reporter" },
+      fetch: fetchConTimeout,
     },
   });
 

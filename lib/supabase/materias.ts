@@ -11,6 +11,15 @@ interface FilaMateria {
   aula: string | null;
 }
 
+export interface ResultadoMaterias {
+  materias: Materia[];
+  /** `null` si la consulta fue correcta; un mensaje si Supabase falló. */
+  error: string | null;
+}
+
+const MENSAJE_ERROR =
+  "No se pudo cargar el catálogo de materias. Intenta de nuevo en unos minutos.";
+
 function mapearMateria(fila: FilaMateria): Materia {
   return {
     nrc: fila.nrc,
@@ -23,8 +32,11 @@ function mapearMateria(fila: FilaMateria): Materia {
 
 /**
  * Catálogo activo desde la tabla public.materias en Supabase.
+ *
+ * Devuelve `error` cuando la consulta falla para que la interfaz no confunda
+ * "Supabase no responde" con "el catálogo está vacío".
  */
-export async function listarMaterias(): Promise<Materia[]> {
+export async function listarMaterias(): Promise<ResultadoMaterias> {
   try {
     const { data, error } = await obtenerSupabaseAdmin()
       .from("materias")
@@ -34,7 +46,7 @@ export async function listarMaterias(): Promise<Materia[]> {
 
     if (error) {
       console.error("[materias] No se pudo leer el catálogo de Supabase.", error);
-      return [];
+      return { materias: [], error: MENSAJE_ERROR };
     }
 
     if (!data || data.length === 0) {
@@ -43,10 +55,13 @@ export async function listarMaterias(): Promise<Materia[]> {
       );
     }
 
-    return (data ?? []).map((fila) => mapearMateria(fila as FilaMateria));
+    return {
+      materias: (data ?? []).map((fila) => mapearMateria(fila as FilaMateria)),
+      error: null,
+    };
   } catch (err) {
     console.error("[materias] Error al inicializar cliente Supabase.", err);
-    return [];
+    return { materias: [], error: MENSAJE_ERROR };
   }
 }
 

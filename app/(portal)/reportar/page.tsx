@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ReportarPage() {
-  const materias = await listarMaterias();
+  const { materias, error } = await listarMaterias();
 
-  return <ReportarView materias={materias} />;
+  return <ReportarView materias={materias} errorCatalogo={error} />;
 }

@@ -68,6 +68,11 @@ as $$
    where creado_en < now() - interval '2 days';
 $$;
 
+-- `create or replace` conserva los permisos, pero se repiten para que la
+-- migración sea explícita y segura si algún día se recrea la función.
+revoke all on function public.limpiar_codigos_vencidos() from PUBLIC, anon, authenticated;
+grant execute on function public.limpiar_codigos_vencidos() to service_role;
+
 -- ----------------------------------------------------------------------------
 -- registrar_reporte con zona horaria de Venezuela (resto idéntico a 0001).
 -- ----------------------------------------------------------------------------
