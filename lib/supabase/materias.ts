@@ -1,9 +1,7 @@
 import "server-only";
 
-import { obtenerMaterias as obtenerMateriasDelCsv } from "@/lib/catalogo-materias";
 import type { Materia } from "@/lib/types";
-
-import { haySupabaseConfigurado, obtenerSupabaseAdmin } from "./admin";
+import { obtenerSupabaseAdmin } from "./admin";
 
 interface FilaMateria {
   nrc: string;
@@ -24,29 +22,26 @@ function mapearMateria(fila: FilaMateria): Materia {
 }
 
 /**
- * Catálogo activo. Si Supabase aún no está configurado, usa el CSV local para
- * que el frontend siga funcionando durante la puesta en marcha.
+ * Catálogo activo desde la tabla public.materias en Supabase.
  */
 export async function listarMaterias(): Promise<Materia[]> {
-  if (!haySupabaseConfigurado()) {
-    console.warn(
-      "[materias] Supabase no configurado; usando data/materias.csv como respaldo.",
-    );
-    return obtenerMateriasDelCsv();
-  }
+  try {
+    const { data, error } = await obtenerSupabaseAdmin()
+      .from("materias")
+      .select("nrc, nombre, docente, horario, aula")
+      .eq("activo", true)
+      .order("nombre", { ascending: true });
 
-  const { data, error } = await obtenerSupabaseAdmin()
-    .from("materias")
-    .select("nrc, nombre, docente, horario, aula")
-    .eq("activo", true)
-    .order("nombre", { ascending: true });
+    if (error) {
+      console.error("[materias] No se pudo leer el catálogo de Supabase.", error);
+      return [];
+    }
 
-  if (error) {
-    console.error("[materias] No se pudo leer el catálogo.", error);
+    return (data ?? []).map((fila) => mapearMateria(fila as FilaMateria));
+  } catch (err) {
+    console.error("[materias] Error al inicializar cliente Supabase.", err);
     return [];
   }
-
-  return (data ?? []).map((fila) => mapearMateria(fila as FilaMateria));
 }
 
 /** Búsqueda simple por NRC o nombre, usada por /api/materias. */
