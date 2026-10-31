@@ -26,9 +26,13 @@ export async function PATCH(
     }
 
     const { data, error } = await obtenerSupabaseAdmin().rpc(
-      "cambiar_estado_reporte",
-      { p_id: id, p_estado: estado, p_nota: nota || null },
-    );
+  "cambiar_estado_reporte",
+  { 
+    p_id: id, 
+    p_estado: estado, 
+    p_nota: nota || undefined 
+  },
+);
 
     if (error) {
       console.error("[api/admin/reportes/:id]", error);
