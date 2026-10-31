@@ -24,6 +24,7 @@ export interface ReporteInput {
   /** Solo para "otro" (obligatorio, máx. 100). Vacío en los demás tipos. */
   tipo_error_detalle: string;
   motivo: string;
+  created_at: string;
 }
 
 /**
