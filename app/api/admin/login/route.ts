@@ -6,6 +6,7 @@ import { leerCuerpo, respuestaError, texto } from "@/lib/api/respuestas";
 import {
   consultasBloqueadas,
   registrarConsultaFallida,
+  registrarIntentoAdmin,
 } from "@/lib/supabase/consultas";
 import { esCorreoValido } from "@/lib/validaciones";
 
@@ -25,21 +26,30 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Mismo freno de fuerza bruta que la consulta, con su propio contador.
     const ipHash = hashIp(`admin:${ipDelCliente(request)}`);
 
     if (await consultasBloqueadas(ipHash)) {
+      await registrarIntentoAdmin({ correo, ipHash, exito: false, motivo: "bloqueado" });
       return respuestaError("limite", "Demasiados intentos. Espera unos minutos.", 429);
     }
 
-    const sesion = await autenticarAdmin(correo, clave);
+    const resultado = await autenticarAdmin(correo, clave);
 
-    if (!sesion) {
-      await registrarConsultaFallida(ipHash);
+    if (!resultado.ok) {
+      await Promise.all([
+        registrarConsultaFallida(ipHash),
+        registrarIntentoAdmin({ correo, ipHash, exito: false, motivo: resultado.motivo }),
+      ]);
+
+      // Mismo mensaje para «clave mala» y «sin permisos»: no revela cuentas.
       return respuestaError("verificacion", MENSAJE, 401);
     }
 
+    await registrarIntentoAdmin({ correo, ipHash, exito: true, motivo: "ok" });
+
     const response = NextResponse.json({ ok: true });
-    iniciarSesionAdmin(response, sesion.token, sesion.expiraEnSegundos);
+    iniciarSesionAdmin(response, resultado.admin);
     return response;
   } catch (error) {
     console.error("[api/admin/login]", error);
