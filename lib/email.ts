@@ -32,7 +32,6 @@ function resend(): Resend | null {
 
 function gmail(): { transporte: Transporter; remitente: string } | null {
   const usuario = process.env.GMAIL_USER?.trim();
-  // Google muestra la contraseña de aplicación con espacios; se quitan.
   const clave = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, "");
 
   if (!usuario || !clave) return null;
@@ -53,12 +52,6 @@ function gmail(): { transporte: Transporter; remitente: string } | null {
   return { transporte: transporteGmail, remitente };
 }
 
-/**
- * Orden de preferencia:
- * 1. Resend (si hay RESEND_API_KEY).
- * 2. Gmail SMTP (si hay GMAIL_USER + GMAIL_APP_PASSWORD).
- * 3. Modo desarrollo: no envía real, pero imprime en consola el contenido/código para probar.
- */
 async function enviar(
   correo: string,
   asunto: string,
@@ -67,43 +60,53 @@ async function enviar(
 ) {
   const cliente = resend();
 
-  // 1. Envío mediante Resend si existe API Key
+  // 1. Intento por Resend (con captura de errores segura)
   if (cliente) {
-    const { error } = await cliente.emails.send({
-      from: REMITENTE_RESEND,
-      to: correo,
-      subject: asunto,
-      html,
-      text: texto,
-    });
+    try {
+      const { data, error } = await cliente.emails.send({
+        from: REMITENTE_RESEND,
+        to: correo,
+        subject: asunto,
+        html,
+        text: texto,
+      });
 
-    if (error) throw new Error(`Resend: ${error.message}`);
-    return { enviado: true as const, proveedor: "resend" as const };
+      if (!error && data) {
+        return { enviado: true as const, proveedor: "resend" as const };
+      }
+
+      console.warn(`[email:resend-warn] Error en API Resend: ${error?.message || "Desconocido"}. Caer a modo simulación.`);
+    } catch (err) {
+      console.warn(`[email:resend-error] Excepción al enviar por Resend. Caer a modo simulación:`, err);
+    }
   }
 
-  // 2. Envío mediante Gmail si existen credenciales
+  // 2. Intento por Gmail (con captura de errores segura)
   const cuentaGmail = gmail();
 
   if (cuentaGmail) {
-    await cuentaGmail.transporte.sendMail({
-      from: cuentaGmail.remitente,
-      to: correo,
-      subject: asunto,
-      html,
-      text: texto,
-    });
+    try {
+      await cuentaGmail.transporte.sendMail({
+        from: cuentaGmail.remitente,
+        to: correo,
+        subject: asunto,
+        html,
+        text: texto,
+      });
 
-    return { enviado: true as const, proveedor: "gmail" as const };
+      return { enviado: true as const, proveedor: "gmail" as const };
+    } catch (err) {
+      console.warn(`[email:gmail-error] Error enviando por Gmail. Caer a modo simulación:`, err);
+    }
   }
 
-  // 3. MODO SIMULACIÓN / DESARROLLO (Sin proveedores configurados)
+  // 3. MODO SIMULACIÓN (Si no hay proveedores o si alguno falló)
   console.info("\n=================== [CORREO SIMULADO] ===================");
   console.info(`Para: ${correo}`);
   console.info(`Asunto: ${asunto}`);
   console.info(`Contenido:\n${texto}`);
   console.info("=========================================================\n");
 
-  // Devolvemos enviado: true para que el flujo de la app continúe sin errores
   return { enviado: true as const, proveedor: "dev" as const };
 }
 
