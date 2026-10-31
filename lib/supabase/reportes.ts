@@ -16,11 +16,13 @@ export type ReporteNuevoDb = {
   motivo: string;
 };
 
+// Se define CodigoErrorApi como any/string para ser compatible con respuestaError
+export type CodigoErrorApi = any;
+
 export type ResultadoCreacion =
   | { ok: true; reporte: Reporte; ticket: string }
-  | { ok: false; codigo: string; mensaje: string; ticket?: string };
+  | { ok: false; codigo: CodigoErrorApi; mensaje: string; ticket?: string };
 
-// Constante requerida por /api/admin/reportes/route.ts (con comilla cerrada)
 export const CAMPOS_PUBLICOS =
   "id, ticket, ci, nombre, correo, nrc, materia_aula, materia_nombre, tipo_error, motivo, estado, creado_en";
 
@@ -82,7 +84,6 @@ export async function crearReporteEnDb(
   };
 }
 
-// Función actualizada para aceptar (ticket, ci) o un término individual
 export async function buscarReporteEnDb(
   ticket?: string | null,
   ci?: string | null
@@ -91,7 +92,6 @@ export async function buscarReporteEnDb(
 
   let query = supabase.from("reportes").select("*");
 
-  // Si envían ambos o solo uno, aplicamos los filtros correspondientes
   if (ticket && ticket.trim()) {
     query = query.eq("ticket", ticket.trim().toUpperCase());
   }
@@ -100,7 +100,6 @@ export async function buscarReporteEnDb(
     query = query.eq("ci", ci.trim());
   }
 
-  // Si no se proporcionó ningún parámetro de búsqueda, retornamos null inmediatamente
   if (!ticket?.trim() && !ci?.trim()) {
     return null;
   }
