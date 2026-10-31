@@ -20,6 +20,10 @@ export type ResultadoCreacion =
   | { ok: true; reporte: Reporte; ticket: string }
   | { ok: false; codigo: string; mensaje: string; ticket?: string };
 
+// Constante requerida por /api/admin/reportes/route.ts (con comilla cerrada)
+export const CAMPOS_PUBLICOS =
+  "id, ticket, ci, nombre, correo, nrc, materia_aula, materia_nombre, tipo_error, motivo, estado, creado_en";
+
 export function mapearReporte(fila: FilaReporteDb): Reporte {
   return {
     id: fila.id,
@@ -31,11 +35,11 @@ export function mapearReporte(fila: FilaReporteDb): Reporte {
     materiaCodigo: fila.materia_aula || "",
     materiaNombre: fila.materia_nombre,
     tipo_error: fila.tipo_error as TipoError,
-    tipoErrorDetalle: "", // La tabla 'reportes' no tiene 'tipo_error_detalle', devolvemos string vacío
+    tipoErrorDetalle: "",
     motivo: fila.motivo,
     estado: fila.estado as any,
     creadoEn: fila.creado_en,
-    created_at: fila.creado_en, // Solución al error: Reporte hereda created_at de ReporteInput
+    created_at: fila.creado_en,
   };
 }
 
@@ -76,4 +80,31 @@ export async function crearReporteEnDb(
     ticket: data.ticket,
     reporte: mapearReporte(data),
   };
+}
+
+// Función requerida por /api/reportes/consultar/route.ts
+export async function buscarReporteEnDb(
+  termino: string,
+): Promise<Reporte | null> {
+  const supabase = obtenerSupabaseAdmin();
+  const esTicket = termino.trim().toUpperCase().startsWith("TK-");
+
+  const query = supabase.from("reportes").select("*");
+
+  if (esTicket) {
+    query.eq("ticket", termino.trim().toUpperCase());
+  } else {
+    query.eq("ci", termino.trim());
+  }
+
+  const { data, error } = await query
+    .order("creado_en", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return mapearReporte(data);
 }
