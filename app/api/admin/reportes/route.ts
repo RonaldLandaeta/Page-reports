@@ -28,7 +28,6 @@ export async function GET(request: Request) {
 
     if (esEstadoReporte(estado)) consulta = consulta.eq("estado", estado);
 
-    // Solo dígitos/guion/letras: evita meter sintaxis de filtro de PostgREST.
     const seguro = q.replace(/[^A-Za-z0-9-]/g, "");
     if (seguro) {
       consulta = consulta.or(
@@ -39,7 +38,7 @@ export async function GET(request: Request) {
     const { data, error } = await consulta;
 
     if (error) {
-      console.error("[api/admin/reportes]", error);
+      console.error("[api/admin/reportes] Error en consulta Supabase:", error);
       return respuestaError("interno", "No pudimos cargar los reportes.", 500);
     }
 
