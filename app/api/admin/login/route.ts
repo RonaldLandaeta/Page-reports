@@ -1,21 +1,48 @@
 import { NextResponse } from "next/server";
 
-import { iniciarSesionAdmin } from "@/lib/admin/sesion";
-import { leerCuerpo, texto } from "@/lib/api/respuestas";
+import { autenticarAdmin, iniciarSesionAdmin } from "@/lib/admin/sesion";
+import { hashIp, ipDelCliente } from "@/lib/api/ip";
+import { leerCuerpo, respuestaError, texto } from "@/lib/api/respuestas";
+import {
+  consultasBloqueadas,
+  registrarConsultaFallida,
+} from "@/lib/supabase/consultas";
+import { esCorreoValido } from "@/lib/validaciones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const MENSAJE =
+  "Correo o contraseña incorrectos, o sin permisos de administrador.";
+
 export async function POST(request: Request) {
   const cuerpo = await leerCuerpo(request);
-  const correo = texto(cuerpo, "correo").trim().toLowerCase() || "admin@ejemplo.com";
+  const correo = texto(cuerpo, "correo").toLowerCase();
+  const clave = typeof cuerpo?.clave === "string" ? cuerpo.clave : "";
 
-  console.info(`[admin/login:mock] Autenticando administrador simulado: ${correo}`);
+  if (!esCorreoValido(correo) || clave.length < 6 || clave.length > 200) {
+    return respuestaError("validacion", MENSAJE, 422);
+  }
 
-  const response = NextResponse.json({ ok: true });
+  try {
+    const ipHash = hashIp(`admin:${ipDelCliente(request)}`);
 
-  // Simulación de sesión de admin activa por 24 horas (86400 segundos)
-  iniciarSesionAdmin(response, "token-admin-simulado-123456", 86400);
+    if (await consultasBloqueadas(ipHash)) {
+      return respuestaError("limite", "Demasiados intentos. Espera unos minutos.", 429);
+    }
 
-  return response;
+    const sesion = await autenticarAdmin(correo, clave);
+
+    if (!sesion) {
+      await registrarConsultaFallida(ipHash);
+      return respuestaError("verificacion", MENSAJE, 401);
+    }
+
+    const response = NextResponse.json({ ok: true });
+    iniciarSesionAdmin(response, sesion.token, sesion.expiraEnSegundos);
+    return response;
+  } catch (error) {
+    console.error("[api/admin/login]", error);
+    return respuestaError("interno", "No pudimos iniciar sesión.", 500);
+  }
 }

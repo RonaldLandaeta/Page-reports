@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:setup": "node scripts/generar-setup.mjs",
+    "db:test": "node scripts/probar-migraciones.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
@@ -17,6 +19,7 @@
     "resend": "^6.35.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.14",
     "@tailwindcss/postcss": "^4.1.0",
     "@types/node": "^22.15.0",
     "@types/nodemailer": "^8.0.2",

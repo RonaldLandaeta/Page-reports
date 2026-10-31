@@ -1,3 +1,9 @@
+/**
+ * Tipos del dominio. Deben coincidir con los enums de Postgres
+ * (public.estado_reporte y public.tipo_error_reporte) y con los catálogos de
+ * lib/catalogos.ts.
+ */
+
 export type TipoError =
   | "error-prerrequisito"
   | "error-correquisito"
@@ -13,7 +19,7 @@ export interface TipoErrorOpcion {
   label: string;
 }
 
-/** Datos que captura el formulario (o el chatbot) y viajan a la API. */
+/** Cuerpo que el formulario o el chatbot envían a POST /api/reportes. */
 export interface ReporteInput {
   ci: string;
   nombre: string;
@@ -24,30 +30,34 @@ export interface ReporteInput {
   /** Solo para "otro" (obligatorio, máx. 100). Vacío en los demás tipos. */
   tipo_error_detalle: string;
   motivo: string;
-  created_at?: string; // <-- Cambiado a opcional con ?
 }
 
 /**
  * Datos que envía el cliente a la API. El servidor resuelve nrc y nombre desde
- * la malla local y exige el token emitido tras verificar el correo.
+ * la malla local y, cuando la verificación real está activa, exige el token.
  */
 export interface NuevoReporteInput extends ReporteInput {
   verificacionToken: string;
 }
 
 /** Reporte ya registrado, con los datos derivados por el sistema. */
-export interface Reporte
-  extends Omit<ReporteInput, "materia_codigo" | "tipo_error_detalle"> {
+export interface Reporte {
   id: string;
   ticket: string;
-  creadoEn: string;
-  estado: EstadoReporte;
+  ci: string;
+  nombre: string;
+  correo: string;
   /** NRC visible (nroCurso). Puede repetirse entre carreras. */
   nrc: string;
   /** Código único de la malla local. */
   materiaCodigo: string;
   /** Snapshot del nombre de la materia al momento del reporte. */
   materiaNombre: string;
+  tipo_error: TipoError;
   /** Detalle del error cuando el tipo es "otro"; vacío en los demás. */
   tipoErrorDetalle: string;
+  motivo: string;
+  estado: EstadoReporte;
+  creadoEn: string;
+  actualizadoEn: string;
 }

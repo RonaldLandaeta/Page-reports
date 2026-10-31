@@ -2,11 +2,7 @@ import { obtenerAdmin } from "@/lib/admin/sesion";
 import { respuestaError, respuestaOk } from "@/lib/api/respuestas";
 import { esEstadoReporte } from "@/lib/catalogos";
 import { obtenerSupabaseAdmin } from "@/lib/supabase/admin";
-import {
-  CAMPOS_PUBLICOS,
-  mapearReporte,
-  type FilaReporteDb,
-} from "@/lib/supabase/reportes";
+import { CAMPOS_PUBLICOS, mapearReporte } from "@/lib/supabase/reportes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +39,7 @@ export async function GET(request: Request) {
     }
 
     return respuestaOk({
-      reportes: (data ?? []).map((fila) => mapearReporte(fila as FilaReporteDb)),
+      reportes: (data ?? []).map((fila) => mapearReporte(fila)),
     });
   } catch (error) {
     console.error("[api/admin/reportes]", error);

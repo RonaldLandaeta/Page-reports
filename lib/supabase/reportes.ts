@@ -1,9 +1,20 @@
+import "server-only";
+
+import { randomInt } from "node:crypto";
+
+import type { CodigoErrorApi } from "@/lib/api/respuestas";
+import { CONFIG } from "@/lib/config";
 import { obtenerSupabaseAdmin } from "@/lib/supabase/admin";
-import type { Database } from "@/lib/supabase/types";
+import type { FilaReporteDb } from "@/lib/supabase/types";
 import type { Reporte, TipoError } from "@/lib/types";
 
-export type FilaReporteDb = Database["public"]["Tables"]["reportes"]["Row"];
+export type { FilaReporteDb };
 
+/** Columnas que puede ver un administrador (nunca se envían secretos). */
+export const CAMPOS_PUBLICOS =
+  "id,ticket,ci,nombre,correo,nrc,materia_codigo,materia_nombre,tipo_error,tipo_error_detalle,motivo,estado,creado_en,actualizado_en" as const;
+
+/** Datos que ya vienen validados desde la API y se insertan en Postgres. */
 export type ReporteNuevoDb = {
   ci: string;
   nombre: string;
@@ -16,16 +27,11 @@ export type ReporteNuevoDb = {
   motivo: string;
 };
 
-// Se define CodigoErrorApi como any/string para ser compatible con respuestaError
-export type CodigoErrorApi = any;
-
 export type ResultadoCreacion =
   | { ok: true; reporte: Reporte; ticket: string }
   | { ok: false; codigo: CodigoErrorApi; mensaje: string; ticket?: string };
 
-export const CAMPOS_PUBLICOS =
-  "id, ticket, ci, nombre, correo, nrc, materia_aula, materia_nombre, tipo_error, motivo, estado, creado_en";
-
+/** Traduce la fila de Postgres (snake_case) al modelo de la aplicación. */
 export function mapearReporte(fila: FilaReporteDb): Reporte {
   return {
     id: fila.id,
@@ -34,84 +40,220 @@ export function mapearReporte(fila: FilaReporteDb): Reporte {
     nombre: fila.nombre,
     correo: fila.correo,
     nrc: fila.nrc,
-    materiaCodigo: fila.materia_aula || "",
+    materiaCodigo: fila.materia_codigo,
     materiaNombre: fila.materia_nombre,
-    tipo_error: fila.tipo_error as TipoError,
-    tipoErrorDetalle: "",
+    tipo_error: fila.tipo_error,
+    tipoErrorDetalle: fila.tipo_error_detalle,
     motivo: fila.motivo,
-    estado: fila.estado as any,
+    estado: fila.estado,
     creadoEn: fila.creado_en,
-    created_at: fila.creado_en,
+    actualizadoEn: fila.actualizado_en,
   };
 }
 
+function generarTicket(): string {
+  return `TK-${randomInt(100_000, 1_000_000)}`;
+}
+
+/**
+ * Inicio del día calendario en la zona configurada, expresado en UTC.
+ * `longOffset` devuelve, por ejemplo, "GMT-04:00" para America/Caracas.
+ */
+function inicioDelDiaEnZona(): string {
+  const ahora = new Date();
+
+  const fecha = new Intl.DateTimeFormat("en-CA", {
+    timeZone: CONFIG.zonaHoraria,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(ahora);
+
+  const nombreZona = new Intl.DateTimeFormat("en-US", {
+    timeZone: CONFIG.zonaHoraria,
+    timeZoneName: "longOffset",
+  })
+    .formatToParts(ahora)
+    .find((parte) => parte.type === "timeZoneName")?.value;
+
+  const coincidencia = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(
+    nombreZona ?? "",
+  );
+  const signo = coincidencia?.[1] === "-" ? -1 : 1;
+  const desplazamientoMinutos =
+    signo *
+    (Number(coincidencia?.[2] ?? 0) * 60 + Number(coincidencia?.[3] ?? 0));
+
+  const inicio = new Date(`${fecha}T00:00:00.000Z`);
+  inicio.setUTCMinutes(inicio.getUTCMinutes() - desplazamientoMinutos);
+
+  return inicio.toISOString();
+}
+
+/** Ticket del mismo reporte (cédula + materia + tipo) en las últimas 24 h. */
+async function buscarTicketDuplicado(
+  ci: string,
+  materiaCodigo: string,
+  tipoError: TipoError,
+): Promise<string | null> {
+  const desde = new Date(
+    Date.now() - CONFIG.ventanaDuplicadosHoras * 60 * 60 * 1000,
+  ).toISOString();
+
+  const { data, error } = await obtenerSupabaseAdmin()
+    .from("reportes")
+    .select("ticket")
+    .eq("ci", ci)
+    .eq("materia_codigo", materiaCodigo)
+    .eq("tipo_error", tipoError)
+    .gte("creado_en", desde)
+    .order("creado_en", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data?.ticket ?? null;
+}
+
+async function contarReportesDelDia(ci: string): Promise<number> {
+  const { count, error } = await obtenerSupabaseAdmin()
+    .from("reportes")
+    .select("id", { count: "exact", head: true })
+    .eq("ci", ci)
+    .gte("creado_en", inicioDelDiaEnZona());
+
+  if (error) throw error;
+
+  return count ?? 0;
+}
+
+function codigoDeErrorDb(error: { code?: string }): CodigoErrorApi {
+  if (error.code === "23514") return "validacion"; // CHECK
+  if (error.code === "23502") return "validacion"; // NOT NULL
+  return "interno";
+}
+
+/**
+ * Inserta el reporte aplicando las reglas de negocio del servidor:
+ * duplicado en 24 h, límite diario y ticket único con reintentos.
+ */
 export async function crearReporteEnDb(
   input: ReporteNuevoDb,
 ): Promise<ResultadoCreacion> {
   const supabase = obtenerSupabaseAdmin();
-  const ticketGenerado = `TK-${Math.floor(100000 + Math.random() * 900000)}`;
 
-  // Convertimos 'error-prerrequisito' -> 'error_prerrequisito' para cumplir con la constraint de Postgres
-  const tipoErrorNormalizado = input.tipo_error.replace(/-/g, "_");
+  const detalle =
+    input.tipo_error === "otro"
+      ? (input.tipo_error_detalle ?? "").trim().replace(/\s+/g, " ").slice(0, 100)
+      : "";
 
-  const { data, error } = await supabase
-  .from("reportes")
-  .insert({
-    ticket: ticketGenerado,
-    ci: input.ci,
-    nombre: input.nombre,
-    correo: input.correo,
-    nrc: input.nrc,
-    materia_nombre: input.materia_nombre,
-    materia_aula: input.materia_codigo,
-    tipo_error: input.tipo_error, // Pasa directo 'error-prerrequisito', etc.
-    motivo: input.motivo,
-    estado: "pendiente",
-  })
-  .select()
-  .single();
-
-  if (error) {
-    console.error("[supabase/reportes] Error al insertar en BD:", error);
+  if (input.tipo_error === "otro" && detalle.length === 0) {
     return {
       ok: false,
-      codigo: "error_db" as CodigoErrorApi,
-      mensaje: `Error en base de datos: ${error.message}`,
+      codigo: "validacion",
+      mensaje: "Especifica el error cuando eliges «Otros».",
     };
   }
 
+  const ticketDuplicado = await buscarTicketDuplicado(
+    input.ci,
+    input.materia_codigo,
+    input.tipo_error,
+  );
+
+  if (ticketDuplicado) {
+    return {
+      ok: false,
+      codigo: "duplicado",
+      mensaje: `Ya registraste un reporte para esta materia con el mismo tipo de error en las últimas ${CONFIG.ventanaDuplicadosHoras} horas.`,
+      ticket: ticketDuplicado,
+    };
+  }
+
+  const reportesDelDia = await contarReportesDelDia(input.ci);
+
+  if (reportesDelDia >= CONFIG.maxReportesPorDia) {
+    return {
+      ok: false,
+      codigo: "limite",
+      mensaje: `Alcanzaste el límite de ${CONFIG.maxReportesPorDia} reportes por día. Intenta nuevamente mañana.`,
+    };
+  }
+
+  for (let intento = 1; intento <= 5; intento += 1) {
+    const ticket = generarTicket();
+
+    const { data, error } = await supabase
+      .from("reportes")
+      .insert({
+        ticket,
+        ci: input.ci,
+        nombre: input.nombre,
+        correo: input.correo,
+        nrc: input.nrc,
+        materia_codigo: input.materia_codigo,
+        materia_nombre: input.materia_nombre,
+        tipo_error: input.tipo_error,
+        tipo_error_detalle: detalle,
+        motivo: input.motivo,
+      })
+      .select(CAMPOS_PUBLICOS)
+      .single();
+
+    if (!error && data) {
+      return { ok: true, ticket, reporte: mapearReporte(data) };
+    }
+
+    if (error?.code === "23505") {
+      // Colisión de ticket: se reintenta con otro número.
+      continue;
+    }
+
+    console.error("[supabase/reportes] no se pudo insertar el reporte:", error);
+
+    return {
+      ok: false,
+      codigo: codigoDeErrorDb(error ?? {}),
+      mensaje: "No pudimos guardar el reporte. Intenta nuevamente.",
+    };
+  }
+
+  console.error(
+    "[supabase/reportes] no se pudo generar un ticket único tras 5 intentos.",
+  );
+
   return {
-    ok: true,
-    ticket: data.ticket,
-    reporte: mapearReporte(data),
+    ok: false,
+    codigo: "interno",
+    mensaje: "No pudimos generar un ticket único. Intenta nuevamente.",
   };
 }
+
+/** Busca por ticket + cédula (ambos datos deben venir validados por la API). */
 export async function buscarReporteEnDb(
   ticket?: string | null,
-  ci?: string | null
+  ci?: string | null,
 ): Promise<Reporte | null> {
-  const supabase = obtenerSupabaseAdmin();
+  const ticketNormalizado = ticket?.trim().toUpperCase() ?? "";
+  const ciNormalizada = ci?.trim() ?? "";
 
-  let query = supabase.from("reportes").select("*");
+  if (!ticketNormalizado && !ciNormalizada) return null;
 
-  if (ticket && ticket.trim()) {
-    query = query.eq("ticket", ticket.trim().toUpperCase());
-  }
+  let consulta = obtenerSupabaseAdmin()
+    .from("reportes")
+    .select(CAMPOS_PUBLICOS);
 
-  if (ci && ci.trim()) {
-    query = query.eq("ci", ci.trim());
-  }
+  if (ticketNormalizado) consulta = consulta.eq("ticket", ticketNormalizado);
+  if (ciNormalizada) consulta = consulta.eq("ci", ciNormalizada);
 
-  if (!ticket?.trim() && !ci?.trim()) {
-    return null;
-  }
-
-  const { data, error } = await query
+  const { data, error } = await consulta
     .order("creado_en", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (error || !data) {
+    if (error) console.error("[supabase/reportes] consulta falló:", error);
     return null;
   }
 

@@ -45,28 +45,72 @@ alter table public.reportes
 
 -- 4) Filas del esquema anterior (la base de producción tiene 0 reportes; esto
 --    solo protege una base de pruebas): se conservan con los tipos nuevos.
-update public.reportes
-   set materia_codigo = nrc
- where materia_codigo is null;
+--    IMPORTANTE: el CHECK viejo debe quitarse ANTES de cambiar los valores;
+--    de lo contrario el UPDATE choca con la restricción anterior.
+alter table public.reportes
+  drop constraint if exists reportes_tipo_error_valido;
 
-update public.reportes
-   set tipo_error_detalle = case tipo_error
-         when 'aula-incorrecta'    then 'Aula incorrecta'
-         when 'docente-incorrecto' then 'Docente no coincide'
-         when 'otro'               then 'Otro problema'
-         else tipo_error_detalle
-       end,
-       tipo_error = case tipo_error
-         when 'horario-incorrecto' then 'cambio-horario'
-         when 'cruce-materias'     then 'cruce-horario'
-         when 'aula-incorrecta'    then 'otro'
-         when 'docente-incorrecto' then 'otro'
-         else tipo_error
+do $$
+begin
+  if exists (
+    select 1
+      from information_schema.columns
+     where table_schema = 'public'
+       and table_name = 'reportes'
+       and column_name = 'materia_aula'
+  ) then
+    -- La versión intermedia de la API guardaba el código de la malla en la
+    -- columna materia_aula. Si tiene ese formato, se recupera; si era un
+    -- aula real, se usa el NRC como respaldo.
+    update public.reportes
+       set materia_codigo = case
+         when materia_aula ~ '^[A-Z]{2,6}-[0-9]+$' then materia_aula
+         else nrc
        end
- where tipo_error in (
-   'horario-incorrecto', 'aula-incorrecta', 'docente-incorrecto', 'cruce-materias'
- )
-    or (tipo_error = 'otro' and btrim(tipo_error_detalle) = '');
+     where materia_codigo is null;
+  else
+    update public.reportes
+       set materia_codigo = nrc
+     where materia_codigo is null;
+  end if;
+end;
+$$;
+
+-- Solo si tipo_error todavía es text. Después de 0007 es un enum y compararlo
+-- con los valores viejos ("horario-incorrecto", etc.) daría error.
+do $$
+declare
+  v_tipo text;
+begin
+  select data_type
+    into v_tipo
+    from information_schema.columns
+   where table_schema = 'public'
+     and table_name = 'reportes'
+     and column_name = 'tipo_error';
+
+  if v_tipo = 'text' then
+    update public.reportes
+       set tipo_error_detalle = case tipo_error
+             when 'aula-incorrecta'    then 'Aula incorrecta'
+             when 'docente-incorrecto' then 'Docente no coincide'
+             when 'otro'               then 'Otro problema'
+             else tipo_error_detalle
+           end,
+           tipo_error = case tipo_error
+             when 'horario-incorrecto' then 'cambio-horario'
+             when 'cruce-materias'     then 'cruce-horario'
+             when 'aula-incorrecta'    then 'otro'
+             when 'docente-incorrecto' then 'otro'
+             else tipo_error
+           end
+     where tipo_error in (
+       'horario-incorrecto', 'aula-incorrecta', 'docente-incorrecto', 'cruce-materias'
+     )
+        or (tipo_error = 'otro' and btrim(tipo_error_detalle) = '');
+  end if;
+end;
+$$;
 
 alter table public.reportes
   alter column materia_codigo set not null;

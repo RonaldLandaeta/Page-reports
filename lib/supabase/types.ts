@@ -1,3 +1,12 @@
+/**
+ * Tipos generados a partir del esquema final de Supabase (migraciones
+ * 0001–0007). Si cambias una migración, actualiza este archivo y ejecuta
+ * `npm run typecheck`.
+ *
+ * No edites a mano los tipos `Row`/`Insert`/`Update` sin comprobar que el SQL
+ * hace lo mismo: son el contrato entre la API y Postgres.
+ */
+
 export type Json =
   | string
   | number
@@ -7,8 +16,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  // Permite instanciar createClient con los tipos correctos.
   __InternalSupabase: {
     PostgrestVersion: "14.18"
   }
@@ -39,6 +47,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_intentos: {
+        Row: {
+          correo: string
+          creado_en: string
+          exito: boolean
+          id: number
+          ip_hash: string
+          motivo: string | null
+        }
+        Insert: {
+          correo: string
+          creado_en?: string
+          exito: boolean
+          id?: never
+          ip_hash: string
+          motivo?: string | null
+        }
+        Update: {
+          correo?: string
+          creado_en?: string
+          exito?: boolean
+          id?: never
+          ip_hash?: string
+          motivo?: string | null
+        }
+        Relationships: []
+      }
       administradores: {
         Row: {
           creado_en: string
@@ -105,60 +140,31 @@ export type Database = {
         }
         Relationships: []
       }
-      materias: {
-        Row: {
-          activo: boolean
-          actualizado_en: string
-          aula: string
-          creado_en: string
-          docente: string
-          horario: string
-          nombre: string
-          nrc: string
-        }
-        Insert: {
-          activo?: boolean
-          actualizado_en?: string
-          aula?: string
-          creado_en?: string
-          docente?: string
-          horario?: string
-          nombre: string
-          nrc: string
-        }
-        Update: {
-          activo?: boolean
-          actualizado_en?: string
-          aula?: string
-          creado_en?: string
-          docente?: string
-          horario?: string
-          nombre?: string
-          nrc?: string
-        }
-        Relationships: []
-      }
       reporte_eventos: {
         Row: {
           creado_en: string
-          estado_anterior: string | null
-          estado_nuevo: string
+          estado_anterior: Database["public"]["Enums"]["estado_reporte"] | null
+          estado_nuevo: Database["public"]["Enums"]["estado_reporte"]
           id: number
           nota: string | null
           reporte_id: string
         }
         Insert: {
           creado_en?: string
-          estado_anterior?: string | null
-          estado_nuevo: string
+          estado_anterior?:
+            | Database["public"]["Enums"]["estado_reporte"]
+            | null
+          estado_nuevo: Database["public"]["Enums"]["estado_reporte"]
           id?: never
           nota?: string | null
           reporte_id: string
         }
         Update: {
           creado_en?: string
-          estado_anterior?: string | null
-          estado_nuevo?: string
+          estado_anterior?:
+            | Database["public"]["Enums"]["estado_reporte"]
+            | null
+          estado_nuevo?: Database["public"]["Enums"]["estado_reporte"]
           id?: never
           nota?: string | null
           reporte_id?: string
@@ -179,55 +185,50 @@ export type Database = {
           ci: string
           correo: string
           creado_en: string
-          estado: string
+          estado: Database["public"]["Enums"]["estado_reporte"]
           id: string
-          materia_aula: string
+          materia_codigo: string
           materia_nombre: string
           motivo: string
           nombre: string
           nrc: string
           ticket: string
-          tipo_error: string
+          tipo_error: Database["public"]["Enums"]["tipo_error_reporte"]
+          tipo_error_detalle: string
         }
         Insert: {
           actualizado_en?: string
           ci: string
           correo: string
           creado_en?: string
-          estado?: string
+          estado?: Database["public"]["Enums"]["estado_reporte"]
           id?: string
-          materia_aula?: string
+          materia_codigo: string
           materia_nombre: string
           motivo: string
           nombre: string
           nrc: string
-          ticket: string
-          tipo_error: string
+          ticket?: string
+          tipo_error: Database["public"]["Enums"]["tipo_error_reporte"]
+          tipo_error_detalle?: string
         }
         Update: {
           actualizado_en?: string
           ci?: string
           correo?: string
           creado_en?: string
-          estado?: string
+          estado?: Database["public"]["Enums"]["estado_reporte"]
           id?: string
-          materia_aula?: string
+          materia_codigo?: string
           materia_nombre?: string
           motivo?: string
           nombre?: string
           nrc?: string
           ticket?: string
-          tipo_error?: string
+          tipo_error?: Database["public"]["Enums"]["tipo_error_reporte"]
+          tipo_error_detalle?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "reportes_nrc_fkey"
-            columns: ["nrc"]
-            isOneToOne: false
-            referencedRelation: "materias"
-            referencedColumns: ["nrc"]
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {
@@ -235,26 +236,34 @@ export type Database = {
     }
     Functions: {
       cambiar_estado_reporte: {
-        Args: { p_estado: string; p_id: string; p_nota?: string }
+        Args: {
+          p_estado: Database["public"]["Enums"]["estado_reporte"]
+          p_id: string
+          p_nota?: string
+        }
         Returns: Json
+      }
+      cambiar_estado_lote: {
+        Args: {
+          p_estado: Database["public"]["Enums"]["estado_reporte"]
+          p_ids: string[]
+          p_nota?: string
+        }
+        Returns: number
       }
       consumir_codigo: { Args: { p_id: string }; Returns: boolean }
       limpiar_codigos_vencidos: { Args: never; Returns: undefined }
       registrar_intento_codigo: { Args: { p_id: string }; Returns: number }
-      registrar_reporte: {
-        Args: {
-          p_ci: string
-          p_correo: string
-          p_motivo: string
-          p_nombre: string
-          p_nrc: string
-          p_tipo_error: string
-        }
-        Returns: Json
-      }
     }
     Enums: {
-      [_ in never]: never
+      estado_reporte: "pendiente" | "en-revision" | "resuelto"
+      tipo_error_reporte:
+        | "error-prerrequisito"
+        | "error-correquisito"
+        | "reserva-cerrada"
+        | "cruce-horario"
+        | "cambio-horario"
+        | "otro"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -379,11 +388,26 @@ export type CompositeTypes<
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
 
+/** Alias cómodos para no repetir Database["public"][...] en el código. */
+export type EstadoReporteDb = Database["public"]["Enums"]["estado_reporte"]
+export type TipoErrorDb = Database["public"]["Enums"]["tipo_error_reporte"]
+export type FilaReporteDb = Database["public"]["Tables"]["reportes"]["Row"]
+
 export const Constants = {
   graphql_public: {
     Enums: {},
   },
   public: {
-    Enums: {},
+    Enums: {
+      estado_reporte: ["pendiente", "en-revision", "resuelto"],
+      tipo_error_reporte: [
+        "error-prerrequisito",
+        "error-correquisito",
+        "reserva-cerrada",
+        "cruce-horario",
+        "cambio-horario",
+        "otro",
+      ],
+    },
   },
 } as const

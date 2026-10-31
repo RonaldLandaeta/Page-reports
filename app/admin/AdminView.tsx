@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import {
   ESTADOS_REPORTE,
@@ -16,15 +16,49 @@ const formatoFecha = new Intl.DateTimeFormat("es-VE", {
   timeStyle: "short",
 });
 
-export function AdminView() {
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
+const boton =
+  "rounded-xl px-3.5 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50";
+const botonPrimario = `${boton} bg-indigo-600 text-white hover:bg-indigo-700`;
+const botonSecundario = `${boton} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50`;
+const campo =
+  "rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10";
+
+interface RespuestaApi {
+  ok: boolean;
+  mensaje?: string;
+  [clave: string]: unknown;
+}
+
+/** Lee `{ ok, mensaje }` sin romperse si la respuesta no es JSON. */
+async function leerRespuesta(respuesta: Response): Promise<RespuestaApi> {
+  try {
+    return (await respuesta.json()) as RespuestaApi;
+  } catch {
+    return { ok: false, mensaje: "Respuesta inesperada del servidor." };
+  }
+}
+
+export function AdminView({ miUserId }: { miUserId: string }) {
   const router = useRouter();
   const [reportes, setReportes] = useState<Reporte[]>([]);
+  const [total, setTotal] = useState(0);
   const [estado, setEstado] = useState<"" | EstadoReporte>("");
   const [q, setQ] = useState("");
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [guardando, setGuardando] = useState<string | null>(null);
   const [notas, setNotas] = useState<Record<string, string>>({});
+
+  const [seleccion, setSeleccion] = useState<ReadonlySet<string>>(new Set());
+  const [formato, setFormato] = useState<"csv" | "json">("csv");
+  const [loteEstado, setLoteEstado] = useState<"" | EstadoReporte>("");
+  const [loteNota, setLoteNota] = useState("");
+  const [trabajando, setTrabajando] = useState(false);
+
+  const irAlLogin = useCallback(() => router.replace("/admin/login"), [router]);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -38,19 +72,26 @@ export function AdminView() {
       const respuesta = await fetch(`/api/admin/reportes?${parametros}`, { cache: "no-store" });
 
       if (respuesta.status === 401) {
-        router.replace("/admin/login");
+        irAlLogin();
         return;
       }
 
-      const datos = (await respuesta.json()) as { ok: boolean; reportes?: Reporte[]; mensaje?: string };
+      const datos = await leerRespuesta(respuesta);
       if (!datos.ok) throw new Error(datos.mensaje);
-      setReportes(datos.reportes ?? []);
+
+      const lista = (datos.reportes as Reporte[] | undefined) ?? [];
+      setReportes(lista);
+      setTotal(typeof datos.total === "number" ? datos.total : lista.length);
+
+      // Solo se conserva lo seleccionado que sigue visible.
+      const visibles = new Set(lista.map((r) => r.id));
+      setSeleccion((previa) => new Set([...previa].filter((id) => visibles.has(id))));
     } catch (fallo) {
       setError(fallo instanceof Error && fallo.message ? fallo.message : "No pudimos cargar los reportes.");
     } finally {
       setCargando(false);
     }
-  }, [estado, q, router]);
+  }, [estado, q, irAlLogin]);
 
   useEffect(() => {
     const espera = window.setTimeout(() => void cargar(), 250);
@@ -61,20 +102,21 @@ export function AdminView() {
     if (nuevo === reporte.estado || guardando) return;
     setGuardando(reporte.id);
     setError(null);
+    setAviso(null);
 
     try {
       const respuesta = await fetch(`/api/admin/reportes/${reporte.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify({ estado: nuevo, nota: notas[reporte.id] ?? "" }),
       });
 
       if (respuesta.status === 401) {
-        router.replace("/admin/login");
+        irAlLogin();
         return;
       }
 
-      const datos = (await respuesta.json()) as { ok: boolean; mensaje?: string };
+      const datos = await leerRespuesta(respuesta);
       if (!datos.ok) throw new Error(datos.mensaje);
 
       setReportes((previos) =>
@@ -88,11 +130,127 @@ export function AdminView() {
     }
   }
 
+  function alternar(id: string) {
+    setSeleccion((previa) => {
+      const siguiente = new Set(previa);
+      if (!siguiente.delete(id)) siguiente.add(id);
+      return siguiente;
+    });
+  }
+
+  const todosMarcados = reportes.length > 0 && seleccion.size === reportes.length;
+
+  function alternarTodos() {
+    setSeleccion(todosMarcados ? new Set() : new Set(reportes.map((r) => r.id)));
+  }
+
+  async function descargar(modo: "seleccion" | "filtro") {
+    if (trabajando) return;
+    if (modo === "seleccion" && seleccion.size === 0) return;
+
+    setTrabajando(true);
+    setError(null);
+    setAviso(null);
+
+    try {
+      const cuerpo =
+        modo === "seleccion"
+          ? { accion: "descargar", formato, ids: [...seleccion] }
+          : { accion: "descargar", formato, estado, q: q.trim() };
+
+      const respuesta = await fetch("/api/admin/reportes", {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify(cuerpo),
+      });
+
+      if (respuesta.status === 401) {
+        irAlLogin();
+        return;
+      }
+
+      if (!respuesta.ok) {
+        const datos = await leerRespuesta(respuesta);
+        throw new Error(datos.mensaje ?? "No pudimos descargar los reportes.");
+      }
+
+      const archivo = await respuesta.blob();
+      const nombre =
+        /filename="([^"]+)"/.exec(respuesta.headers.get("Content-Disposition") ?? "")?.[1] ??
+        `reportes.${formato}`;
+
+      const enlace = document.createElement("a");
+      enlace.href = URL.createObjectURL(archivo);
+      enlace.download = nombre;
+      document.body.append(enlace);
+      enlace.click();
+      enlace.remove();
+      window.setTimeout(() => URL.revokeObjectURL(enlace.href), 10_000);
+
+      const descargados = Number(respuesta.headers.get("X-Reportes-Total") ?? 0);
+      const marcados = Number(respuesta.headers.get("X-Reportes-Marcados") ?? 0);
+      const truncado = respuesta.headers.get("X-Reportes-Truncado") === "1";
+
+      setAviso(
+        `Se descargaron ${descargados} reporte(s)` +
+          (marcados > 0 ? `; ${marcados} pasaron a «En revisión».` : ".") +
+          (truncado ? " Había más: se descargó el máximo permitido, acota el filtro." : ""),
+      );
+
+      await cargar();
+    } catch (fallo) {
+      setError(fallo instanceof Error && fallo.message ? fallo.message : "No pudimos descargar los reportes.");
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  async function cambiarLote() {
+    if (trabajando || !loteEstado || seleccion.size === 0) return;
+
+    const etiqueta = getEstadoReporteLabel(loteEstado);
+    if (!window.confirm(`¿Pasar ${seleccion.size} reporte(s) a «${etiqueta}»?`)) return;
+
+    setTrabajando(true);
+    setError(null);
+    setAviso(null);
+
+    try {
+      const respuesta = await fetch("/api/admin/reportes", {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({
+          accion: "estado",
+          ids: [...seleccion],
+          estado: loteEstado,
+          nota: loteNota,
+        }),
+      });
+
+      if (respuesta.status === 401) {
+        irAlLogin();
+        return;
+      }
+
+      const datos = await leerRespuesta(respuesta);
+      if (!datos.ok) throw new Error(datos.mensaje);
+
+      setAviso(`${String(datos.cambiados ?? 0)} de ${seleccion.size} reporte(s) pasaron a «${etiqueta}».`);
+      setLoteNota("");
+      setSeleccion(new Set());
+      await cargar();
+    } catch (fallo) {
+      setError(fallo instanceof Error && fallo.message ? fallo.message : "No pudimos cambiar el estado.");
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
   async function salir() {
     try {
       await postJson("/api/admin/logout", {});
     } finally {
-      router.replace("/admin/login");
+      irAlLogin();
     }
   }
 
@@ -100,8 +258,7 @@ export function AdminView() {
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Reportes de horarios</h1>
-        <button type="button" onClick={salir}
-          className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+        <button type="button" onClick={salir} className={botonSecundario}>
           Cerrar sesión
         </button>
       </div>
@@ -109,10 +266,9 @@ export function AdminView() {
       <div className="mt-5 flex flex-wrap gap-3">
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar por ticket, cédula, NRC o código" aria-label="Buscar reportes"
-          className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10" />
+          className={`${campo} min-w-0 flex-1`} />
         <select value={estado} onChange={(e) => setEstado(e.target.value as "" | EstadoReporte)}
-          aria-label="Filtrar por estado"
-          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm">
+          aria-label="Filtrar por estado" className={campo}>
           <option value="">Todos los estados</option>
           {ESTADOS_REPORTE.map((e) => (
             <option key={e.value} value={e.value}>{e.label}</option>
@@ -120,27 +276,80 @@ export function AdminView() {
         </select>
       </div>
 
+      <section aria-label="Acciones por lote"
+        className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={todosMarcados} onChange={alternarTodos}
+            disabled={reportes.length === 0} className="h-4 w-4" />
+          Seleccionar visibles ({seleccion.size})
+        </label>
+
+        <select value={formato} onChange={(e) => setFormato(e.target.value as "csv" | "json")}
+          aria-label="Formato de descarga" className={campo}>
+          <option value="csv">CSV (Excel)</option>
+          <option value="json">JSON</option>
+        </select>
+
+        <button type="button" disabled={trabajando || seleccion.size === 0}
+          onClick={() => void descargar("seleccion")} className={botonPrimario}>
+          Descargar seleccionados
+        </button>
+        <button type="button" disabled={trabajando || total === 0}
+          onClick={() => void descargar("filtro")} className={botonSecundario}>
+          Descargar todos ({total}, según filtro)
+        </button>
+
+        <div className="flex w-full flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          <select value={loteEstado} onChange={(e) => setLoteEstado(e.target.value as "" | EstadoReporte)}
+            aria-label="Nuevo estado para la selección" className={campo}>
+            <option value="">Cambiar estado de la selección…</option>
+            {ESTADOS_REPORTE.map((e) => (
+              <option key={e.value} value={e.value}>{e.label}</option>
+            ))}
+          </select>
+          <input type="text" maxLength={500} value={loteNota} onChange={(e) => setLoteNota(e.target.value)}
+            placeholder="Nota (opcional)" aria-label="Nota para el lote" className={`${campo} min-w-0 flex-1`} />
+          <button type="button" disabled={trabajando || seleccion.size === 0 || !loteEstado}
+            onClick={() => void cambiarLote()} className={botonPrimario}>
+            Aplicar a {seleccion.size}
+          </button>
+        </div>
+
+        <p className="w-full text-xs text-slate-500">
+          Al descargar, los reportes «Pendiente de revisión» pasan automáticamente a «En revisión».
+        </p>
+      </section>
+
       {error && (
         <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
       )}
+      {aviso && (
+        <p role="status" className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{aviso}</p>
+      )}
 
       <p className="mt-4 text-xs text-slate-500" aria-live="polite">
-        {cargando ? "Cargando..." : `${reportes.length} reporte(s) (máximo 200 más recientes)`}
+        {cargando
+          ? "Cargando..."
+          : `Mostrando ${reportes.length} de ${total} reporte(s) (los 200 más recientes)`}
       </p>
 
       <ul className="mt-3 space-y-3">
         {reportes.map((r) => (
           <li key={r.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-mono text-sm font-bold text-indigo-700">{r.ticket}</p>
-                <p className="mt-0.5 text-sm font-semibold text-slate-800">
-                  {r.materiaNombre} <span className="font-normal text-slate-500">· NRC {r.nrc} · {r.materiaCodigo}</span>
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {getTipoErrorLabel(r.tipo_error)}
-                  {r.tipoErrorDetalle ? ` (${r.tipoErrorDetalle})` : ""} · {formatoFecha.format(new Date(r.creadoEn))}
-                </p>
+              <div className="flex min-w-0 gap-3">
+                <input type="checkbox" checked={seleccion.has(r.id)} onChange={() => alternar(r.id)}
+                  aria-label={`Seleccionar ${r.ticket}`} className="mt-1 h-4 w-4 shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-mono text-sm font-bold text-indigo-700">{r.ticket}</p>
+                  <p className="mt-0.5 text-sm font-semibold text-slate-800">
+                    {r.materiaNombre} <span className="font-normal text-slate-500">· NRC {r.nrc} · {r.materiaCodigo}</span>
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {getTipoErrorLabel(r.tipo_error)}
+                    {r.tipoErrorDetalle ? ` (${r.tipoErrorDetalle})` : ""} · {formatoFecha.format(new Date(r.creadoEn))}
+                  </p>
+                </div>
               </div>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
                 {getEstadoReporteLabel(r.estado)}
@@ -166,6 +375,184 @@ export function AdminView() {
           </li>
         ))}
       </ul>
+
+      <PanelAdministradores miUserId={miUserId} onSesionCaducada={irAlLogin} />
     </main>
+  );
+}
+
+// ── Gestión de administradores ──────────────────────────────────────────────
+
+interface AdministradorFila {
+  userId: string;
+  email: string;
+  creadoEn: string;
+}
+
+function PanelAdministradores({
+  miUserId,
+  onSesionCaducada,
+}: {
+  miUserId: string;
+  onSesionCaducada: () => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [lista, setLista] = useState<AdministradorFila[]>([]);
+  const [correo, setCorreo] = useState("");
+  const [clave, setClave] = useState("");
+  const [cargando, setCargando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    setError(null);
+
+    try {
+      const respuesta = await fetch("/api/admin/administradores", { cache: "no-store" });
+
+      if (respuesta.status === 401) {
+        onSesionCaducada();
+        return;
+      }
+
+      const datos = await leerRespuesta(respuesta);
+      if (!datos.ok) throw new Error(datos.mensaje);
+      setLista((datos.administradores as AdministradorFila[] | undefined) ?? []);
+    } catch (fallo) {
+      setError(fallo instanceof Error && fallo.message ? fallo.message : "No pudimos cargar los administradores.");
+    } finally {
+      setCargando(false);
+    }
+  }, [onSesionCaducada]);
+
+  useEffect(() => {
+    if (abierto) void cargar();
+  }, [abierto, cargar]);
+
+  async function agregar(event: FormEvent) {
+    event.preventDefault();
+    if (enviando) return;
+
+    setEnviando(true);
+    setError(null);
+    setAviso(null);
+
+    try {
+      const respuesta = await fetch("/api/admin/administradores", {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ correo, clave }),
+      });
+
+      if (respuesta.status === 401) {
+        onSesionCaducada();
+        return;
+      }
+
+      const datos = await leerRespuesta(respuesta);
+      if (!datos.ok) throw new Error(datos.mensaje);
+
+      setAviso(
+        datos.creado
+          ? "Usuario creado y autorizado. Comparte la contraseña temporal por un canal seguro."
+          : "Usuario autorizado como administrador.",
+      );
+      setCorreo("");
+      setClave("");
+      await cargar();
+    } catch (fallo) {
+      setError(fallo instanceof Error && fallo.message ? fallo.message : "No pudimos agregar al administrador.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function quitar(fila: AdministradorFila) {
+    if (enviando || !window.confirm(`¿Quitar el acceso de administrador a ${fila.email}?`)) return;
+
+    setEnviando(true);
+    setError(null);
+    setAviso(null);
+
+    try {
+      const respuesta = await fetch(`/api/admin/administradores?id=${encodeURIComponent(fila.userId)}`, {
+        method: "DELETE",
+      });
+
+      if (respuesta.status === 401) {
+        onSesionCaducada();
+        return;
+      }
+
+      const datos = await leerRespuesta(respuesta);
+      if (!datos.ok) throw new Error(datos.mensaje);
+
+      setAviso(`Se quitó el acceso a ${fila.email}.`);
+      await cargar();
+    } catch (fallo) {
+      setError(fallo instanceof Error && fallo.message ? fallo.message : "No pudimos quitar al administrador.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <button type="button" onClick={() => setAbierto((v) => !v)} aria-expanded={abierto}
+        className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-800">
+        Administradores
+        <span aria-hidden="true">{abierto ? "−" : "+"}</span>
+      </button>
+
+      {abierto && (
+        <div className="mt-4 space-y-4">
+          {error && (
+            <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
+          )}
+          {aviso && (
+            <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{aviso}</p>
+          )}
+
+          <ul className="divide-y divide-slate-100 text-sm">
+            {cargando && lista.length === 0 && <li className="py-2 text-slate-500">Cargando...</li>}
+            {lista.map((fila) => (
+              <li key={fila.userId} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span className="break-all text-slate-800">
+                  {fila.email}
+                  {fila.userId === miUserId && <span className="ml-2 text-xs text-slate-500">(tú)</span>}
+                </span>
+                {fila.userId !== miUserId && (
+                  <button type="button" disabled={enviando} onClick={() => void quitar(fila)}
+                    className="rounded-lg border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">
+                    Quitar acceso
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          <form onSubmit={agregar} className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">
+            <div className="min-w-0 flex-1">
+              <label htmlFor="nuevo-admin-correo" className="block text-xs font-medium text-slate-600">Correo</label>
+              <input id="nuevo-admin-correo" type="email" required value={correo}
+                onChange={(e) => setCorreo(e.target.value)} className={`${campo} mt-1 w-full`} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <label htmlFor="nuevo-admin-clave" className="block text-xs font-medium text-slate-600">
+                Contraseña temporal (solo si el usuario aún no existe)
+              </label>
+              <input id="nuevo-admin-clave" type="password" minLength={10} maxLength={72}
+                autoComplete="new-password" value={clave}
+                onChange={(e) => setClave(e.target.value)} className={`${campo} mt-1 w-full`} />
+            </div>
+            <button type="submit" disabled={enviando} className={botonPrimario}>
+              {enviando ? "Guardando..." : "Autorizar"}
+            </button>
+          </form>
+        </div>
+      )}
+    </section>
   );
 }

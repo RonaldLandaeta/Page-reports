@@ -98,8 +98,17 @@ En el dashboard de Supabase → **SQL Editor**, ejecuta en este orden:
    `tipo_error_detalle` a 100, recrea el índice de duplicados con
    `materia_codigo`, elimina la función `registrar_reporte` y borra la tabla de
    materias.
+7. `supabase/migrations/0007_esquema_consistente.sql` — **esquema tipado**:
+   convierte `estado` y `tipo_error` en enums nativos (coinciden con
+   `lib/types.ts` y `lib/supabase/types.ts`), agrega el evento inicial al
+   historial, deja un ticket por defecto en Postgres y recrea
+   `cambiar_estado_reporte` con el enum.
 
-(`supabase/setup.sql` ya trae todo junto (0001 a 0006) para pegar de una vez.)
+`supabase/setup.sql` ya trae todo junto (0001 a 0007) para pegar de una vez.
+**No se edita a mano**: se regenera con `npm run db:setup` a partir de las
+migraciones. Antes de aplicarlo puedes validarlo contra un Postgres real
+(WASM) con `npm run db:test`, que prueba base nueva, actualización desde
+0001–0005 y ejecución repetida.
 
 También puedes usar la CLI:
 
@@ -109,11 +118,12 @@ supabase db push
 ```
 
 > **Importante (migración a malla local):** si tu proyecto ya tenía las
-> migraciones anteriores, ejecuta `0006_malla_local.sql` **antes** de desplegar
-> este código. Es idempotente y no toca `reporte_eventos`,
-> `codigos_verificacion`, `consulta_intentos` ni `administradores`. Los
-> reportes existentes (si los hubiera) se conservan: sus tipos antiguos se
-> convierten (`horario-incorrecto` → `cambio-horario`, `cruce-materias` →
+> migraciones anteriores, ejecuta `0006_malla_local.sql` y después
+> `0007_esquema_consistente.sql` **antes** de desplegar este código. Son
+> idempotentes y no tocan `reporte_eventos`, `codigos_verificacion`,
+> `consulta_intentos` ni `administradores`. Los reportes existentes (si los
+> hubiera) se conservan: sus tipos antiguos se convierten
+> (`horario-incorrecto` → `cambio-horario`, `cruce-materias` →
 > `cruce-horario`; `aula-incorrecta`, `docente-incorrecto` y `otro` → `otro`
 > con un detalle) y `materia_codigo` toma el valor de `nrc`.
 >
@@ -207,17 +217,30 @@ Abre `http://localhost:3000`.
 npm run build
 npm run start
 npm run typecheck
+npm run db:setup   # regenera supabase/setup.sql desde las migraciones
+npm run db:test    # valida las migraciones contra Postgres (PGlite)
 ```
 
 ## Panel de administración (`/admin`)
 
-1. Supabase → Authentication → Users → crea un usuario (correo + contraseña).
+1. Supabase → Authentication → Users → crea el primer usuario (correo +
+   contraseña, marca **Auto Confirm User**).
 2. Autorízalo (SQL Editor):
    `insert into public.administradores (user_id) select id from auth.users where email = 'tu-admin@dominio';`
-3. Entra en `/admin/login`. La sesión dura lo que el JWT de Supabase (1 h por
-   defecto); después pide login de nuevo. Cookie `httpOnly` + `SameSite=Lax`.
-4. Filtra por estado, busca por ticket/cédula/NRC/código y cambia el estado con una
-   nota opcional (queda en `reporte_eventos`).
+3. Entra en `/admin/login`. La sesión es una cookie `httpOnly` firmada que dura
+   `ADMIN_SESION_HORAS` (8 h por defecto), sin renovarse. En cada petición se
+   vuelve a comprobar que el usuario siga en `administradores`: si lo quitas,
+   pierde el acceso al instante.
+4. Filtra por estado, busca por ticket/cédula/NRC/código y cambia el estado con
+   una nota opcional (queda en `reporte_eventos`).
+5. Lotes: marca reportes y pásalos de estado juntos, o descárgalos (CSV para
+   Excel o JSON), sea la selección o todo lo que cumpla el filtro (hasta 5000).
+   Al descargar, los «Pendiente de revisión» pasan a «En revisión».
+6. Más administradores: sección «Administradores» del panel (autoriza a un
+   usuario existente o crea uno con contraseña temporal). No puedes quitarte a
+   ti mismo ni dejar la lista vacía.
+7. Auditoría: cada intento de login (correcto o fallido) queda en
+   `public.admin_intentos` con el correo, la IP hasheada y el motivo.
 
 ## API
 
@@ -273,6 +296,8 @@ tipos se ignora).
 - que `VERIFICACION_SECRET` tenga al menos 32 caracteres;
 - que existan las tablas `reportes`, `reporte_eventos`,
   `codigos_verificacion`, `consulta_intentos` y `administradores`;
+- que las columnas de `reportes` coincidan con `lib/supabase/types.ts`
+  (detecta bases con migraciones viejas);
 - cuántas materias tiene el catálogo local (`lib/materias/index.ts`) y cuántos
   reportes hay registrados.
 
@@ -287,9 +312,9 @@ Si `ok` es `false`, el campo `mensaje` indica qué revisar. Los fallos también
 aparecen en los logs de Vercel con el prefijo `[api/salud]`.
 
 > Si los reportes fallan con un error de columna (`materia_codigo` o
-> `tipo_error_detalle` inexistentes) o de CHECK de `tipo_error`, ejecuta
-> `supabase/migrations/0006_malla_local.sql` en el proyecto que muestra
-> `proyecto`.
+> `tipo_error_detalle` inexistentes) o de tipo (`estado`/`tipo_error` como
+> texto en vez de enum), ejecuta `supabase/setup.sql` completo o la migración
+> `0007_esquema_consistente.sql` en el proyecto que muestra `proyecto`.
 
 ### Comprobaciones en Supabase
 
@@ -312,6 +337,19 @@ where proname in (
   'limpiar_codigos_vencidos'
 )
 order by proname;
+
+-- ¿Los enums están creados y las columnas los usan?
+select t.typname, e.enumlabel
+from pg_type t
+join pg_enum e on e.enumtypid = t.oid
+where t.typnamespace = 'public'::regnamespace
+order by t.typname, e.enumsortorder;
+
+select column_name, data_type, udt_name
+from information_schema.columns
+where table_schema = 'public'
+  and table_name = 'reportes'
+  and column_name in ('estado', 'tipo_error');
 
 -- ¿Quedaron restricciones viejas?
 select conname, pg_get_constraintdef(oid)
@@ -348,12 +386,17 @@ Esquema final de `public.reportes`:
 | `nrc`                | `text`        | `nroCurso` visible (se repite entre carreras) |
 | `materia_codigo`     | `text`        | código único de la malla local               |
 | `materia_nombre`     | `text`        | snapshot                                     |
-| `tipo_error`         | `text`        | CHECK con los seis slugs                     |
+| `tipo_error`         | `enum`        | `tipo_error_reporte` (seis valores)          |
 | `tipo_error_detalle` | `text`        | solo «otro», máximo 100                      |
 | `motivo`             | `text`        | 15 a 600 caracteres                          |
-| `estado`             | `text`        | `pendiente`, `en-revision`, `resuelto`       |
+| `estado`             | `enum`        | `estado_reporte`: `pendiente`, `en-revision`, `resuelto` |
 | `creado_en`          | `timestamptz` |                                              |
 | `actualizado_en`     | `timestamptz` |                                              |
+
+Los enums `estado_reporte` y `tipo_error_reporte` son la única fuente de verdad
+de los valores válidos: `lib/types.ts` y `lib/supabase/types.ts` los replican.
+`reporte_eventos` también usa `estado_reporte` y cada reporte nace con su evento
+inicial.
 
 RLS está activo en todas las tablas. El acceso queda denegado para `anon` y
 `authenticated`; la API usa `service_role`.
@@ -394,7 +437,9 @@ lib/
   materias/buscar.ts             # Búsqueda por código, NRC o nombre (pura)
   supabase/
     admin.ts                     # Cliente service_role (solo servidor)
-    reportes.ts
+    consultas.ts                 # Límite de consultas fallidas
+    reportes.ts                  # Altas, búsqueda y reglas de negocio
+    types.ts                     # Tipos generados del esquema (contrato con Postgres)
   verificacion-servidor.ts       # Códigos, límites y tokens HMAC
   email.ts                       # Resend / Gmail SMTP
   secreto.ts                     # Secreto único de firma/hash
@@ -403,6 +448,9 @@ lib/
   reportes/formato.ts
   types.ts
   validaciones.ts
+scripts/
+  generar-setup.mjs              # Regenera supabase/setup.sql (npm run db:setup)
+  probar-migraciones.mjs         # Prueba las migraciones con PGlite (npm run db:test)
 supabase/
   config.toml
   migrations/0001_init.sql
@@ -411,6 +459,7 @@ supabase/
   migrations/0004_permisos.sql
   migrations/0005_catalogo_local.sql
   migrations/0006_malla_local.sql
+  migrations/0007_esquema_consistente.sql
   setup.sql
 ```
 

@@ -31,3 +31,28 @@ export async function registrarConsultaFallida(ipHash: string): Promise<void> {
 
   if (error) console.error("[consultas] no se pudo registrar el intento.", error);
 }
+
+export type MotivoIntentoAdmin =
+  | "ok"
+  | "credenciales"
+  | "sin_permiso"
+  | "bloqueado";
+
+/** Auditoría de login de /admin. Nunca interrumpe el inicio de sesión. */
+export async function registrarIntentoAdmin(datos: {
+  correo: string;
+  ipHash: string;
+  exito: boolean;
+  motivo: MotivoIntentoAdmin;
+}): Promise<void> {
+  const { error } = await obtenerSupabaseAdmin()
+    .from("admin_intentos")
+    .insert({
+      correo: datos.correo.slice(0, 254),
+      ip_hash: datos.ipHash,
+      exito: datos.exito,
+      motivo: datos.motivo,
+    });
+
+  if (error) console.error("[admin/auditoria] no se pudo registrar.", error);
+}

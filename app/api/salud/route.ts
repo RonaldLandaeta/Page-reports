@@ -10,6 +10,7 @@ import {
   proyectoSupabase,
   urlSupabase,
 } from "@/lib/supabase/admin";
+import { CAMPOS_PUBLICOS } from "@/lib/supabase/reportes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -96,7 +97,23 @@ export async function GET() {
     const proyecto = proyectoSupabase();
     const fuenteUrl = fuenteUrlSupabase();
 
-    if (faltantes.length > 0) {
+    // Detecta una base con migraciones viejas: si falta materia_codigo,
+    // tipo_error_detalle o una columna nueva, PostgREST devuelve error aquí.
+    const { error: errorEsquema } = await supabase
+      .from("reportes")
+      .select(CAMPOS_PUBLICOS)
+      .limit(0);
+
+    const esquema = !errorEsquema;
+
+    if (errorEsquema) {
+      console.error(
+        "[api/salud] el esquema de public.reportes está desactualizado:",
+        errorEsquema.message,
+      );
+    }
+
+    if (faltantes.length > 0 || !esquema) {
       return NextResponse.json(
         {
           ok: false,
@@ -105,8 +122,11 @@ export async function GET() {
           fuenteUrl,
           tablas,
           faltantes,
+          esquema,
           materias: null,
-          mensaje: `Faltan tablas en Supabase: ${faltantes.join(", ")}. Ejecuta las migraciones de supabase/migrations en orden.`,
+          mensaje: !esquema
+            ? "El esquema de public.reportes no coincide con lib/supabase/types.ts. Ejecuta supabase/setup.sql (o la migración 0007) en el proyecto que muestra `proyecto`."
+            : `Faltan tablas en Supabase: ${faltantes.join(", ")}. Ejecuta las migraciones de supabase/migrations en orden.`,
         },
         { status: 503, headers: SIN_CACHE },
       );
@@ -128,6 +148,7 @@ export async function GET() {
         fuenteUrl,
         tablas,
         faltantes: [],
+        esquema: true,
         materias: totalMaterias,
         reportes: count ?? 0,
         mensaje:
