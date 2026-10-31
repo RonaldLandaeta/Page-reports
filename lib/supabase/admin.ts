@@ -1,11 +1,12 @@
 import "server-only";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./types";
 
 /** Evita que una petición quede colgada si Supabase no responde. */
 const TIMEOUT_MS = 8_000;
 
-let cliente: SupabaseClient | null = null;
+let cliente: SupabaseClient<Database> | null = null;
 
 function variable(nombre: string): string {
   return (process.env[nombre] ?? "").trim();
@@ -159,14 +160,19 @@ export const fetchConTimeout: typeof fetch = (input, init) => {
   return fetch(input, { ...init, signal });
 };
 
+/** Permite limpiar la instancia de cliente en caché si es necesario reconfigurar la conexión. */
+export function limpiarClienteAdmin(): void {
+  cliente = null;
+}
+
 /**
- * Cliente con la service_role. Salta RLS, así que solo puede importarse desde
- * código de servidor (route handlers, server components, scripts).
+ * Cliente con la service_role y tipado estricto con `Database`. 
+ * Salta RLS, así que solo puede importarse desde código de servidor.
  */
-export function obtenerSupabaseAdmin(): SupabaseClient {
+export function obtenerSupabaseAdmin(): SupabaseClient<Database> {
   if (cliente) return cliente;
 
-  cliente = createClient(urlSupabase(), claveServiceRole(), {
+  cliente = createClient<Database>(urlSupabase(), claveServiceRole(), {
     auth: {
       persistSession: false,
       autoRefreshToken: false,

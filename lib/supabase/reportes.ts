@@ -51,28 +51,31 @@ export async function crearReporteEnDb(
   const supabase = obtenerSupabaseAdmin();
   const ticketGenerado = `TK-${Math.floor(100000 + Math.random() * 900000)}`;
 
+  // Convertimos 'error-prerrequisito' -> 'error_prerrequisito' para cumplir con la constraint de Postgres
+  const tipoErrorNormalizado = input.tipo_error.replace(/-/g, "_");
+
   const { data, error } = await supabase
-    .from("reportes")
-    .insert({
-      ticket: ticketGenerado,
-      ci: input.ci,
-      nombre: input.nombre,
-      correo: input.correo,
-      nrc: input.nrc,
-      materia_nombre: input.materia_nombre,
-      materia_aula: input.materia_codigo,
-      tipo_error: input.tipo_error,
-      motivo: input.motivo,
-      estado: "pendiente",
-    })
-    .select()
-    .single();
+  .from("reportes")
+  .insert({
+    ticket: ticketGenerado,
+    ci: input.ci,
+    nombre: input.nombre,
+    correo: input.correo,
+    nrc: input.nrc,
+    materia_nombre: input.materia_nombre,
+    materia_aula: input.materia_codigo,
+    tipo_error: input.tipo_error, // Pasa directo 'error-prerrequisito', etc.
+    motivo: input.motivo,
+    estado: "pendiente",
+  })
+  .select()
+  .single();
 
   if (error) {
     console.error("[supabase/reportes] Error al insertar en BD:", error);
     return {
       ok: false,
-      codigo: "error_db",
+      codigo: "error_db" as CodigoErrorApi,
       mensaje: `Error en base de datos: ${error.message}`,
     };
   }
@@ -83,7 +86,6 @@ export async function crearReporteEnDb(
     reporte: mapearReporte(data),
   };
 }
-
 export async function buscarReporteEnDb(
   ticket?: string | null,
   ci?: string | null
