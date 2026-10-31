@@ -123,17 +123,14 @@ export function claveServiceRole(): string {
     );
   }
 
+  // Si es del formato nuevo secreto (sb_secret_), la aceptamos directamente
+  if (valor.startsWith("sb_secret_")) {
+    return valor;
+  }
+
   if (valor.startsWith("sb_publishable_")) {
     throw new Error(
       "SUPABASE_SERVICE_ROLE_KEY contiene una clave publicable. Usa la clave secreta (service_role / sb_secret_…).",
-    );
-  }
-
-  const rol = rolDeClave(valor);
-
-  if (rol && rol !== "service_role") {
-    throw new Error(
-      `SUPABASE_SERVICE_ROLE_KEY tiene rol "${rol}", no "service_role". Revisa la clave en Vercel.`,
     );
   }
 
