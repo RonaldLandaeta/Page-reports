@@ -82,19 +82,27 @@ export async function crearReporteEnDb(
   };
 }
 
-// Función requerida por /api/reportes/consultar/route.ts
+// Función actualizada para aceptar (ticket, ci) o un término individual
 export async function buscarReporteEnDb(
-  termino: string,
+  ticket?: string | null,
+  ci?: string | null
 ): Promise<Reporte | null> {
   const supabase = obtenerSupabaseAdmin();
-  const esTicket = termino.trim().toUpperCase().startsWith("TK-");
 
-  const query = supabase.from("reportes").select("*");
+  let query = supabase.from("reportes").select("*");
 
-  if (esTicket) {
-    query.eq("ticket", termino.trim().toUpperCase());
-  } else {
-    query.eq("ci", termino.trim());
+  // Si envían ambos o solo uno, aplicamos los filtros correspondientes
+  if (ticket && ticket.trim()) {
+    query = query.eq("ticket", ticket.trim().toUpperCase());
+  }
+
+  if (ci && ci.trim()) {
+    query = query.eq("ci", ci.trim());
+  }
+
+  // Si no se proporcionó ningún parámetro de búsqueda, retornamos null inmediatamente
+  if (!ticket?.trim() && !ci?.trim()) {
+    return null;
   }
 
   const { data, error } = await query
