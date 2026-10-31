@@ -133,7 +133,7 @@ export function ModalExito({ reporte, onClose }: ModalExitoProps) {
               <dd className="text-right font-medium text-slate-800">
                 {reporte.materiaNombre}
                 <span className="block text-xs font-normal text-slate-500">
-                  NRC {reporte.nrc}
+                  NRC {reporte.nrc} · {reporte.materiaCodigo}
                 </span>
               </dd>
             </div>
@@ -141,6 +141,11 @@ export function ModalExito({ reporte, onClose }: ModalExitoProps) {
               <dt className="shrink-0 text-slate-500">Tipo de error</dt>
               <dd className="text-right font-medium text-slate-800">
                 {getTipoErrorLabel(reporte.tipo_error)}
+                {reporte.tipoErrorDetalle && (
+                  <span className="block break-words text-xs font-normal text-slate-500">
+                    {reporte.tipoErrorDetalle}
+                  </span>
+                )}
               </dd>
             </div>
             <div className="flex items-start justify-between gap-4">

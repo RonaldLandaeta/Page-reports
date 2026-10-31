@@ -13,11 +13,24 @@ import {
 
 import { useReportes, type ResultadoRegistro } from "@/context/ReportesContext";
 import { ErrorApi, postJson } from "@/lib/api-cliente";
-import { TIPOS_ERROR, getTipoErrorLabel } from "@/lib/catalogos";
-import type { Materia, NuevoReporteInput, TipoError } from "@/lib/types";
+import {
+  TIPOS_ERROR,
+  getTipoErrorLabel,
+  tipoRequiereDetalle,
+} from "@/lib/catalogos";
+import {
+  filtrarMaterias,
+  indexarMaterias,
+  normalizarTexto,
+  resolverMateria,
+  type Materia,
+  type MateriaIndexada,
+} from "@/lib/materias/buscar";
+import type { NuevoReporteInput, TipoError } from "@/lib/types";
 import {
   CEDULA_MAX_DIGITOS,
   CEDULA_MIN_DIGITOS,
+  DETALLE_ERROR_MAX,
   MOTIVO_MAX,
   MOTIVO_MIN,
   esCedulaValida,
@@ -37,6 +50,7 @@ type Paso =
   | "verificacion"
   | "nrc"
   | "tipo_error"
+  | "detalle"
   | "motivo";
 
 /** El usuario puede pedir otro código estando en el paso de verificación. */
@@ -63,24 +77,22 @@ interface Datos {
   verificacionToken?: string;
   materia?: Materia;
   tipo_error?: TipoError;
+  /** Solo para "otro" (máx. 100 caracteres). */
+  tipo_error_detalle?: string;
 }
 
 interface Respuesta {
   mensajes: ContenidoBot[];
   paso: Paso;
+  /** Opciones para desambiguar la materia (NRC repetido entre carreras). */
+  opciones?: Materia[];
   /** Descarta los datos acumulados (reporte terminado o bloqueado). */
   reiniciar?: boolean;
-}
-
-interface MateriaIndexada {
-  materia: Materia;
-  texto: string;
 }
 
 interface ContextoProceso {
   datos: Datos;
   indice: MateriaIndexada[];
-  mapa: Map<string, Materia>;
   registrar: (data: NuevoReporteInput) => Promise<ResultadoRegistro>;
 }
 
@@ -94,8 +106,9 @@ const PREGUNTAS: Record<Paso, string> = {
   correo: "¿A qué correo te enviamos la confirmación?",
   verificacion:
     "Escribe el código de 6 dígitos que enviamos a tu correo. Si no lo tienes, pulsa «Reenviar código».",
-  nrc: "¿En qué materia está el problema? Escribe el NRC o el nombre, o elige una de la lista.",
+  nrc: "¿En qué materia está el problema? Escribe el NRC, el código o el nombre, o elige una de la lista.",
   tipo_error: "¿Qué tipo de problema es?",
+  detalle: `Especifica el error (máximo ${DETALLE_ERROR_MAX} caracteres).`,
   motivo: `Cuéntame el motivo: ¿qué está mal en el horario? (mínimo ${MOTIVO_MINIMO} caracteres)`,
 };
 
@@ -104,8 +117,9 @@ const PLACEHOLDERS: Record<Paso, string> = {
   nombre: "Ej. Ana Martínez",
   correo: "nombre@correo-institucional.edu.ve",
   verificacion: "Código de 6 dígitos",
-  nrc: "NRC o nombre de la materia",
+  nrc: "NRC, código o nombre de la materia",
   tipo_error: "Elige una opción o escríbela",
+  detalle: "Ej. La materia no aparece en mi reserva",
   motivo: "Describe el problema…",
 };
 
@@ -116,6 +130,7 @@ const ETIQUETAS: Record<Paso, string> = {
   verificacion: "código de verificación",
   nrc: "materia",
   tipo_error: "tipo de problema",
+  detalle: "especifica el error",
   motivo: "motivo",
 };
 
@@ -126,6 +141,7 @@ const MAX_LONGITUD: Record<Paso, number> = {
   verificacion: 6,
   nrc: 80,
   tipo_error: 40,
+  detalle: DETALLE_ERROR_MAX,
   motivo: MOTIVO_MAXIMO,
 };
 
@@ -144,22 +160,14 @@ const MENSAJES_INICIALES: Mensaje[] = [
 
 /* ──────────────────────────── Lógica de conversación ────────────────────── */
 
-function normalizar(valor: string): string {
-  return valor
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
-
 const TIPOS_NORMALIZADOS = TIPOS_ERROR.map((tipo) => ({
   value: tipo.value,
-  etiqueta: normalizar(tipo.label),
-  clave: normalizar(tipo.value),
+  etiqueta: normalizarTexto(tipo.label),
+  clave: normalizarTexto(tipo.value),
 }));
 
 function resolverTipo(texto: string): TipoError | null {
-  const consulta = normalizar(texto);
+  const consulta = normalizarTexto(texto);
   if (!consulta) return null;
 
   const exacto = TIPOS_NORMALIZADOS.find(
@@ -171,24 +179,6 @@ function resolverTipo(texto: string): TipoError | null {
     tipo.etiqueta.includes(consulta),
   );
   return parciales.length === 1 ? parciales[0].value : null;
-}
-
-function buscarMaterias(
-  indice: MateriaIndexada[],
-  consulta: string,
-  limite: number,
-): Materia[] {
-  const q = normalizar(consulta);
-  const resultado: Materia[] = [];
-
-  for (const item of indice) {
-    if (!q || item.texto.includes(q)) {
-      resultado.push(item.materia);
-      if (resultado.length === limite) break;
-    }
-  }
-
-  return resultado;
 }
 
 function rechazo(paso: Paso, texto: string): Respuesta {
@@ -213,7 +203,7 @@ async function procesar(
   texto: string,
   contexto: ContextoProceso,
 ): Promise<Respuesta> {
-  const { datos, indice, mapa, registrar } = contexto;
+  const { datos, indice, registrar } = contexto;
 
   switch (paso) {
     case "ci": {
@@ -290,7 +280,7 @@ async function procesar(
         );
       }
 
-      if (COMANDO_REENVIAR.has(normalizar(texto))) {
+      if (COMANDO_REENVIAR.has(normalizarTexto(texto))) {
         try {
           const resultado = await postJson<{ codigoDemo?: string }>(
             "/api/verificacion/solicitar",
@@ -347,28 +337,40 @@ async function procesar(
     }
 
     case "nrc": {
-      const materia =
-        mapa.get(texto.trim()) ??
-        (() => {
-          const coincidencias = buscarMaterias(indice, texto, 2);
-          return coincidencias.length === 1 ? coincidencias[0] : undefined;
-        })();
+      // Por código, NRC o nombre. Un NRC repetido (02002 → FING y TELE) nunca
+      // se resuelve solo: se muestran las opciones para que la persona elija.
+      const resolucion = resolverMateria(indice, texto);
 
-      if (!materia) {
+      if (resolucion.tipo === "ninguna") {
         return rechazo(
           "nrc",
-          "No encontré una materia única con ese dato. Elige una de las sugerencias o revisa el NRC.",
+          "No encontré ninguna materia con ese dato. Revisa el NRC, el código o el nombre, o elige una de las sugerencias.",
         );
       }
 
+      if (resolucion.tipo === "ambigua") {
+        const lista = resolucion.opciones
+          .map((m) => `• ${m.codigo} — [${m.nrc}] ${m.nombre}`)
+          .join("\n");
+
+        return {
+          mensajes: [
+            {
+              texto: `Encontré varias materias con ese dato:\n${lista}\n\nToca una opción o escribe su código completo (ej. ${resolucion.opciones[0].codigo}).`,
+            },
+          ],
+          paso: "nrc",
+          opciones: resolucion.opciones,
+        };
+      }
+
+      const { materia } = resolucion;
       datos.materia = materia;
-      const detalle = [materia.horario, materia.aula && `Aula ${materia.aula}`]
-        .filter(Boolean)
-        .join(" · ");
+      const detalle = materia.horario;
 
       return avanzar("tipo_error", [
         {
-          texto: `Perfecto: ${materia.nombre} (NRC ${materia.nrc})${detalle ? `, ${detalle}` : ""}.`,
+          texto: `Perfecto: ${materia.nombre} (NRC ${materia.nrc}, ${materia.codigo})${detalle ? `, ${detalle}` : ""}.`,
         },
       ]);
     }
@@ -380,6 +382,27 @@ async function procesar(
       }
 
       datos.tipo_error = tipo;
+      datos.tipo_error_detalle = "";
+
+      // "Otros" exige un detalle corto antes del motivo.
+      return avanzar(tipoRequiereDetalle(tipo) ? "detalle" : "motivo");
+    }
+
+    case "detalle": {
+      const detalle = texto.replace(/\s+/g, " ").trim();
+
+      if (detalle.length === 0) {
+        return rechazo("detalle", "Necesito que especifiques el error.");
+      }
+
+      if (detalle.length > DETALLE_ERROR_MAX) {
+        return rechazo(
+          "detalle",
+          `Es muy largo: máximo ${DETALLE_ERROR_MAX} caracteres (escribiste ${detalle.length}).`,
+        );
+      }
+
+      datos.tipo_error_detalle = detalle;
       return avanzar("motivo");
     }
 
@@ -392,14 +415,22 @@ async function procesar(
         );
       }
 
-      const { ci, nombre, correo, materia, tipo_error, verificacionToken } =
-        datos;
+      const {
+        ci,
+        nombre,
+        correo,
+        materia,
+        tipo_error,
+        tipo_error_detalle,
+        verificacionToken,
+      } = datos;
       if (
         !ci ||
         !nombre ||
         !correo ||
         !materia ||
         !tipo_error ||
+        (tipoRequiereDetalle(tipo_error) && !tipo_error_detalle) ||
         !verificacionToken
       ) {
         return bloqueo("Perdí algunos datos de la conversación. Empecemos de nuevo.");
@@ -410,8 +441,11 @@ async function procesar(
           ci,
           nombre,
           correo,
-          nrc: materia.nrc,
+          materia_codigo: materia.codigo,
           tipo_error,
+          tipo_error_detalle: tipoRequiereDetalle(tipo_error)
+            ? (tipo_error_detalle ?? "")
+            : "",
           motivo,
           verificacionToken,
         });
@@ -427,7 +461,7 @@ async function procesar(
         return {
           mensajes: [
             {
-              texto: `¡Listo! Registré tu reporte de ${getTipoErrorLabel(tipo_error).toLowerCase()} en ${materia.nombre}. Este es tu código de ticket:`,
+              texto: `¡Listo! Registré tu reporte («${getTipoErrorLabel(tipo_error)}») para ${materia.nombre}. Este es tu código de ticket:`,
               ticket: resultado.reporte.ticket,
             },
             {
@@ -502,6 +536,8 @@ interface CompositorProps {
   ocupado: boolean;
   deshabilitado: boolean;
   indice: MateriaIndexada[];
+  /** Opciones pendientes de desambiguar (NRC repetido). */
+  opciones: Materia[];
   entradaRef: RefObject<HTMLTextAreaElement | null>;
   onEnviar: (texto: string, vista?: string) => void;
 }
@@ -515,16 +551,19 @@ function Compositor({
   ocupado,
   deshabilitado,
   indice,
+  opciones,
   entradaRef,
   onEnviar,
 }: CompositorProps) {
   const [texto, setTexto] = useState("");
   const bloqueado = ocupado || deshabilitado;
 
-  const sugerencias = useMemo(
-    () => (paso === "nrc" ? buscarMaterias(indice, texto, 6) : []),
-    [paso, indice, texto],
-  );
+  const sugerencias = useMemo(() => {
+    if (paso !== "nrc") return [];
+    // Sin texto se muestran las opciones de la desambiguación pendiente.
+    if (!texto.trim()) return opciones.length > 0 ? opciones : [];
+    return filtrarMaterias(indice, texto, 6);
+  }, [paso, indice, opciones, texto]);
 
   function cambiar(valor: string) {
     const soloDigitos = paso === "ci" || paso === "verificacion";
@@ -594,15 +633,21 @@ function Compositor({
         >
           {sugerencias.map((materia) => (
             <button
-              key={materia.nrc}
+              key={materia.codigo}
               type="button"
               disabled={bloqueado}
               onClick={() =>
-                enviar(materia.nrc, `NRC ${materia.nrc} — ${materia.nombre}`)
+                enviar(
+                  materia.codigo,
+                  `[${materia.nrc}] ${materia.nombre} (${materia.codigo})`,
+                )
               }
               className={CLASE_CHIP}
             >
-              {materia.nrc} · {materia.nombre}
+              [{materia.nrc}] {materia.nombre}
+              <span className="ml-1.5 font-mono text-[10px] font-medium opacity-70">
+                {materia.codigo}
+              </span>
             </button>
           ))}
         </div>
@@ -654,6 +699,11 @@ function Compositor({
               {texto.length}/{MOTIVO_MAXIMO}
             </span>
           )}
+          {paso === "detalle" && (
+            <span className="tabular-nums">
+              {texto.length}/{DETALLE_ERROR_MAX}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -678,6 +728,7 @@ export function ChatbotPanel({
   const [mensajes, setMensajes] = useState<Mensaje[]>(MENSAJES_INICIALES);
   const [paso, setPaso] = useState<Paso>("ci");
   const [ocupado, setOcupado] = useState(false);
+  const [opciones, setOpciones] = useState<Materia[]>([]);
 
   // Estado que no se pinta vive en refs: evita renders y cierres obsoletos.
   const datosRef = useRef<Datos>({});
@@ -690,15 +741,7 @@ export function ChatbotPanel({
   const entradaRef = useRef<HTMLTextAreaElement>(null);
 
   const indice = useMemo<MateriaIndexada[]>(
-    () =>
-      materias.map((materia) => ({
-        materia,
-        texto: normalizar(`${materia.nrc} ${materia.nombre}`),
-      })),
-    [materias],
-  );
-  const mapa = useMemo(
-    () => new Map(materias.map((materia) => [materia.nrc, materia])),
+    () => indexarMaterias(materias),
     [materias],
   );
 
@@ -748,13 +791,13 @@ export function ChatbotPanel({
           const respuesta = await procesar(pasoActual, texto, {
             datos: datosRef.current,
             indice,
-            mapa,
             registrar: registrarReporte,
           });
 
           if (respuesta.reiniciar) datosRef.current = {};
           pasoRef.current = respuesta.paso;
           setPaso(respuesta.paso);
+          setOpciones(respuesta.opciones ?? []);
           agregar(
             respuesta.mensajes.map((mensaje) => ({
               autor: "bot" as const,
@@ -774,7 +817,7 @@ export function ChatbotPanel({
         }
       }, RETRASO_BOT_MS);
     },
-    [agregar, indice, mapa, registrarReporte],
+    [agregar, indice, registrarReporte],
   );
 
   const reiniciarConversacion = useCallback(() => {
@@ -782,6 +825,7 @@ export function ChatbotPanel({
     pasoRef.current = "ci";
     interactuado.current = false;
     setPaso("ci");
+    setOpciones([]);
     setMensajes(MENSAJES_INICIALES);
   }, []);
 
@@ -849,6 +893,7 @@ export function ChatbotPanel({
         ocupado={ocupado}
         deshabilitado={catalogoVacio}
         indice={indice}
+        opciones={opciones}
         entradaRef={entradaRef}
         onEnviar={enviar}
       />

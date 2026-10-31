@@ -4,16 +4,19 @@ import {
   respuestaOk,
   texto,
 } from "@/lib/api/respuestas";
-import { esTipoError } from "@/lib/catalogos";
+import { esTipoError, tipoRequiereDetalle } from "@/lib/catalogos";
 import { enviarConfirmacionReporte } from "@/lib/email";
+import { buscarMateriaPorCodigo } from "@/lib/materias";
 import {
   crearReporteEnDb,
+  type ReporteNuevoDb,
   type ResultadoCreacion,
 } from "@/lib/supabase/reportes";
-import type { ReporteInput } from "@/lib/types";
+import type { TipoError } from "@/lib/types";
 import {
   CEDULA_MAX_DIGITOS,
   CEDULA_MIN_DIGITOS,
+  DETALLE_ERROR_MAX,
   MOTIVO_MAX,
   MOTIVO_MIN,
   NOMBRE_MAX,
@@ -38,10 +41,15 @@ export async function POST(request: Request) {
   const ci = texto(cuerpo, "ci");
   const nombre = texto(cuerpo, "nombre").replace(/\s+/g, " ");
   const correo = texto(cuerpo, "correo").toLowerCase();
-  const nrc = texto(cuerpo, "nrc");
+  const materiaCodigo = texto(cuerpo, "materia_codigo");
   const tipoError = texto(cuerpo, "tipo_error");
+  const detalleEnviado = texto(cuerpo, "tipo_error_detalle").replace(/\s+/g, " ");
   const motivo = texto(cuerpo, "motivo");
   const token = texto(cuerpo, "verificacionToken");
+
+  // El cliente envía el código único; nrc y nombre se resuelven en el servidor
+  // desde la malla local (el NRC solo no sirve: se repite entre carreras).
+  const materia = buscarMateriaPorCodigo(materiaCodigo);
 
   const campos: Record<string, string> = {};
 
@@ -59,19 +67,30 @@ export async function POST(request: Request) {
     campos.correo = mensajeCorreoInstitucional();
   }
 
-  if (!/^\d{3,10}$/.test(nrc)) {
-    campos.nrc = "Selecciona una materia del catálogo.";
+  if (!materia) {
+    campos.materia_codigo = "Selecciona una materia de la malla.";
   }
 
   if (!esTipoError(tipoError)) {
     campos.tipo_error = "Selecciona el tipo de error.";
   }
 
+  // «Especifica el error» solo aplica a "otro"; en los demás tipos se ignora.
+  const detalle = tipoRequiereDetalle(tipoError) ? detalleEnviado : "";
+
+  if (tipoRequiereDetalle(tipoError)) {
+    if (detalle.length === 0) {
+      campos.tipo_error_detalle = "Especifica el error.";
+    } else if (detalle.length > DETALLE_ERROR_MAX) {
+      campos.tipo_error_detalle = `Máximo ${DETALLE_ERROR_MAX} caracteres.`;
+    }
+  }
+
   if (motivo.length < MOTIVO_MIN || motivo.length > MOTIVO_MAX) {
     campos.motivo = `Describe el problema entre ${MOTIVO_MIN} y ${MOTIVO_MAX} caracteres.`;
   }
 
-  if (Object.keys(campos).length > 0) {
+  if (Object.keys(campos).length > 0 || !materia) {
     return respuestaError(
       "validacion",
       "Revisa los datos del formulario.",
@@ -101,12 +120,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const input: ReporteInput = {
+  const input: ReporteNuevoDb = {
     ci,
     nombre,
     correo,
-    nrc,
-    tipo_error: tipoError as ReporteInput["tipo_error"],
+    nrc: materia.nrc,
+    materia_codigo: materia.codigo,
+    materia_nombre: materia.nombre,
+    tipo_error: tipoError as TipoError,
+    tipo_error_detalle: detalle,
     motivo,
   };
 
@@ -130,9 +152,7 @@ export async function POST(request: Request) {
         ? 409
         : resultado.codigo === "limite"
           ? 429
-          : resultado.codigo === "materia"
-            ? 400
-            : 500;
+          : 500;
 
     return respuestaError(
       resultado.codigo,

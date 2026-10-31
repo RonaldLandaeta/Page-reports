@@ -108,7 +108,7 @@ export function AdminView() {
 
       <div className="mt-5 flex flex-wrap gap-3">
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar por ticket, cédula o NRC" aria-label="Buscar reportes"
+          placeholder="Buscar por ticket, cédula, NRC o código" aria-label="Buscar reportes"
           className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10" />
         <select value={estado} onChange={(e) => setEstado(e.target.value as "" | EstadoReporte)}
           aria-label="Filtrar por estado"
@@ -135,10 +135,11 @@ export function AdminView() {
               <div className="min-w-0">
                 <p className="font-mono text-sm font-bold text-indigo-700">{r.ticket}</p>
                 <p className="mt-0.5 text-sm font-semibold text-slate-800">
-                  {r.materiaNombre} <span className="font-normal text-slate-500">· NRC {r.nrc}</span>
+                  {r.materiaNombre} <span className="font-normal text-slate-500">· NRC {r.nrc} · {r.materiaCodigo}</span>
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  {getTipoErrorLabel(r.tipo_error)} · {formatoFecha.format(new Date(r.creadoEn))}
+                  {getTipoErrorLabel(r.tipo_error)}
+                  {r.tipoErrorDetalle ? ` (${r.tipoErrorDetalle})` : ""} · {formatoFecha.format(new Date(r.creadoEn))}
                 </p>
               </div>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">

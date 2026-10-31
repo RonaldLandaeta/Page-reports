@@ -5,12 +5,20 @@ import type {
 } from "./types";
 
 export const TIPOS_ERROR: TipoErrorOpcion[] = [
-  { value: "horario-incorrecto", label: "Horario incorrecto" },
-  { value: "aula-incorrecta", label: "Aula incorrecta" },
-  { value: "docente-incorrecto", label: "Docente no coincide" },
-  { value: "cruce-materias", label: "Cruce de materias" },
-  { value: "otro", label: "Otro problema" },
+  { value: "error-prerrequisito", label: "Error de prerrequisito" },
+  { value: "error-correquisito", label: "Error de correquisito" },
+  { value: "reserva-cerrada", label: "Reserva cerrada" },
+  { value: "cruce-horario", label: "Cruce de horario" },
+  { value: "cambio-horario", label: "Cambio de horario" },
+  { value: "otro", label: "Otros" },
 ];
+
+/** Único tipo que exige el campo adicional «Especifica el error». */
+export const TIPO_ERROR_CON_DETALLE: TipoError = "otro";
+
+export function tipoRequiereDetalle(tipo: string): boolean {
+  return tipo === TIPO_ERROR_CON_DETALLE;
+}
 
 export const ESTADOS_REPORTE: Array<{
   value: EstadoReporte;

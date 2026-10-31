@@ -2,13 +2,14 @@ import { obtenerAdmin } from "@/lib/admin/sesion";
 import { respuestaError, respuestaOk } from "@/lib/api/respuestas";
 import { esEstadoReporte } from "@/lib/catalogos";
 import { obtenerSupabaseAdmin } from "@/lib/supabase/admin";
-import { mapearReporte, type FilaReporteDb } from "@/lib/supabase/reportes";
+import {
+  CAMPOS_PUBLICOS,
+  mapearReporte,
+  type FilaReporteDb,
+} from "@/lib/supabase/reportes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const CAMPOS =
-  "id, ticket, ci, nombre, correo, nrc, tipo_error, motivo, materia_nombre, materia_aula, estado, creado_en";
 
 export async function GET(request: Request) {
   try {
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
 
     let consulta = obtenerSupabaseAdmin()
       .from("reportes")
-      .select(CAMPOS)
+      .select(CAMPOS_PUBLICOS)
       .order("creado_en", { ascending: false })
       .limit(200);
 
@@ -31,7 +32,7 @@ export async function GET(request: Request) {
     const seguro = q.replace(/[^A-Za-z0-9-]/g, "");
     if (seguro) {
       consulta = consulta.or(
-        `ticket.ilike.%${seguro}%,ci.ilike.%${seguro}%,nrc.ilike.%${seguro}%`,
+        `ticket.ilike.%${seguro}%,ci.ilike.%${seguro}%,nrc.ilike.%${seguro}%,materia_codigo.ilike.%${seguro}%`,
       );
     }
 

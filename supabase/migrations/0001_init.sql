@@ -19,7 +19,7 @@ create table if not exists public.materias (
   constraint materias_nombre_largo check (char_length(nombre) between 2 and 160)
 );
 
-comment on table public.materias is 'Catálogo académico. Se importa desde data/materias.csv con supabase/seed.sql.';
+comment on table public.materias is 'Catálogo académico (obsoleto: se elimina en 0006; la malla es local).';
 
 -- ----------------------------------------------------------------------------
 -- Reportes

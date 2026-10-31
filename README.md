@@ -22,36 +22,57 @@ Next.js Route Handlers  (/api/*)
   │  service_role + reglas + tokens firmados
   ▼
 Supabase Postgres  ── RLS activo, sin acceso directo para anon
-  │
+  │                      SOLO reportes/tickets y datos del usuario
   └── Resend o Gmail SMTP (código de verificación y confirmación)
+
+Malla curricular ── vive en el repositorio (lib/materias), nunca en Supabase
 ```
 
 - El navegador **nunca** recibe la `service_role` ni habla directo con la base
   de datos.
-- Las reglas de negocio (duplicados, límite diario, ticket único) se ejecutan
-  dentro de una función de Postgres, con un advisory lock por cédula.
+- Las reglas de negocio (duplicados, límite diario) se validan en el servidor;
+  el ticket único se genera en la API y la base de datos garantiza su unicidad.
+- **La malla curricular es local**: `MALLA_OFICIAL` en `lib/materias/index.ts`.
+  En Supabase solo hay reportes, historial, códigos de verificación, intentos
+  de consulta y administradores. No existen «ofertas»: la persona elige una
+  materia de la malla y reporta el error que tuvo.
+- El NRC visible (`nroCurso`, ej. `02002`) **se repite entre carreras**, por eso
+  el formulario y el chatbot envían el **código único** (`FING-02002`,
+  `TELE-02002`) y la API resuelve y guarda ambos (`nrc` y `materia_codigo`).
 - El código de verificación se genera y valida en el servidor. El cliente solo
   recibe un **token firmado** (HMAC, 20 minutos) que autoriza crear el reporte.
 
 ## Funcionalidad
 
-- **Formulario tradicional** con cédula, nombre, correo, materia (`nrc`), tipo
-  de error y motivo.
-- **Catálogo de materias en Supabase** (tabla `materias`), importado desde
-  `data/materias.csv` con `supabase/seed.sql` (el CSV es solo la fuente del seed;
-  la app no lo lee en tiempo de ejecución).
+- **Formulario tradicional** con cédula, nombre, correo, materia (se envía
+  `materia_codigo`; la lista muestra `[nroCurso] nombre` y el horario de la
+  materia elegida), tipo de error y motivo (15 a 600 caracteres).
+- **Tipos de error** (slug → etiqueta): `error-prerrequisito` → «Error de
+  prerrequisito», `error-correquisito` → «Error de correquisito»,
+  `reserva-cerrada` → «Reserva cerrada», `cruce-horario` → «Cruce de horario»,
+  `cambio-horario` → «Cambio de horario», `otro` → «Otros».
+- **«Otros»** muestra el campo obligatorio «Especifica el error» (máximo 100
+  caracteres), que se guarda en `tipo_error_detalle`. En los demás tipos queda
+  vacío.
+- **Catálogo de materias local** en `lib/materias/index.ts` con los campos
+  `codigo`, `nroCurso`, `materia`, `prelaciones`, `correquisitos` y
+  `horarioDefecto`. Expone el tipo `Materia` (`codigo`, `nrc`, `nombre`,
+  `horario`) y funciones para listar y buscar por código, NRC o nombre.
 - **Verificación de correo real** con código de 6 dígitos enviado por Resend o
   Gmail SMTP.
   En desarrollo, si no hay `RESEND_API_KEY`, el código se muestra en pantalla.
 - **Reglas de negocio en el servidor**:
-  - Duplicado con la misma cédula + NRC + tipo de error en 24 horas.
+  - Duplicado con la misma cédula + `materia_codigo` + tipo de error en 24
+    horas (así `FING-02002` y `TELE-02002` son reportes distintos).
   - Máximo 5 reportes por cédula por día calendario (`America/Caracas`).
-- **Ticket único** `TK-XXXXXX` generado en Postgres.
+- **Ticket único** `TK-XXXXXX` generado por la API.
 - **Consulta protegida** por ticket + cédula, sin revelar cuál dato falló.
 - **Correo de confirmación** con el ticket (best-effort: si falla, el reporte
   ya quedó registrado).
 - **Chatbot interactivo** con el mismo flujo y las mismas reglas que el
-  formulario.
+  formulario. Busca la materia por NRC, código o nombre; si un NRC coincide con
+  varias materias muestra las opciones y nunca elige una al azar. Con «Otros»
+  pide el detalle (máx. 100 caracteres).
 - **Historial de estados** en `reporte_eventos` (trigger al cambiar `estado`).
 
 ## Puesta en marcha
@@ -60,20 +81,25 @@ Supabase Postgres  ── RLS activo, sin acceso directo para anon
 
 En el dashboard de Supabase → **SQL Editor**, ejecuta en este orden:
 
-1. `supabase/migrations/0001_init.sql` — tablas, índices, RLS, triggers y la
-   función `registrar_reporte`.
+1. `supabase/migrations/0001_init.sql` — tablas, índices, RLS y triggers
+   (histórico: la versión inicial también creaba la tabla de materias y la
+   función `registrar_reporte`, que `0006` elimina).
 2. `supabase/migrations/0002_auditoria.sql` — intentos de código atómicos,
    límite de consultas fallidas y zona horaria de Venezuela.
 3. `supabase/migrations/0003_admin.sql` — tabla `administradores` y función
    para cambiar estados (panel `/admin`).
 4. `supabase/migrations/0004_permisos.sql` — permisos explícitos de la Data API
    para `service_role`.
-5. `supabase/migrations/0005_reparar_materias.sql` — repara una tabla `materias`
-   con esquema antiguo (columna `materia` en vez de `nombre`, columnas
-   faltantes o `nrc` sin índice único).
-6. `supabase/seed.sql` — catálogo inicial de materias.
+5. `supabase/migrations/0005_catalogo_local.sql` — quita la clave foránea de
+   `reportes.nrc` hacia la tabla `materias`.
+6. `supabase/migrations/0006_malla_local.sql` — **migración a malla local**:
+   agrega `materia_codigo` y `tipo_error_detalle`, elimina la columna de aula del reporte,
+   actualiza el CHECK de `tipo_error` (seis valores), limita
+   `tipo_error_detalle` a 100, recrea el índice de duplicados con
+   `materia_codigo`, elimina la función `registrar_reporte` y borra la tabla de
+   materias.
 
-(`supabase/setup.sql` ya trae todo junto para pegar de una vez.)
+(`supabase/setup.sql` ya trae todo junto (0001 a 0006) para pegar de una vez.)
 
 También puedes usar la CLI:
 
@@ -82,14 +108,17 @@ supabase link --project-ref <ref>
 supabase db push
 ```
 
-> **Importante:** `supabase db push` aplica las migraciones, pero **no ejecuta**
-> `supabase/seed.sql`. Después de `db push`, pega el contenido de `seed.sql` en
-> el SQL Editor (o usa `supabase db reset` en local, que sí corre el seed).
-> Si la tabla `materias` queda vacía, `/reportar` no podrá seleccionar materias.
+> **Importante (migración a malla local):** si tu proyecto ya tenía las
+> migraciones anteriores, ejecuta `0006_malla_local.sql` **antes** de desplegar
+> este código. Es idempotente y no toca `reporte_eventos`,
+> `codigos_verificacion`, `consulta_intentos` ni `administradores`. Los
+> reportes existentes (si los hubiera) se conservan: sus tipos antiguos se
+> convierten (`horario-incorrecto` → `cambio-horario`, `cruce-materias` →
+> `cruce-horario`; `aula-incorrecta`, `docente-incorrecto` y `otro` → `otro`
+> con un detalle) y `materia_codigo` toma el valor de `nrc`.
 >
-> `setup.sql` incluye `0005` justo después de crear `materias`, así que también
-> arregla proyectos donde la tabla ya existía con el esquema viejo. No borres la
-> tabla ni los reportes: la migración solo renombra/añade columnas.
+> Ya no hay archivos de carga de catálogo (CSV ni seed SQL): la malla solo se
+> edita en `lib/materias/index.ts`.
 
 El archivo `supabase/config.toml` ya está incluido para el entorno local
 (`supabase start`). Ajusta `db.major_version` si tu proyecto remoto usa otra
@@ -187,7 +216,7 @@ npm run typecheck
    `insert into public.administradores (user_id) select id from auth.users where email = 'tu-admin@dominio';`
 3. Entra en `/admin/login`. La sesión dura lo que el JWT de Supabase (1 h por
    defecto); después pide login de nuevo. Cookie `httpOnly` + `SameSite=Lax`.
-4. Filtra por estado, busca por ticket/cédula/NRC y cambia el estado con una
+4. Filtra por estado, busca por ticket/cédula/NRC/código y cambia el estado con una
    nota opcional (queda en `reporte_eventos`).
 
 ## API
@@ -198,8 +227,7 @@ npm run typecheck
 | `POST` | `/api/verificacion/validar`   | Valida el código y devuelve un token firmado.    |
 | `POST` | `/api/reportes`               | Crea el reporte (exige token de verificación).   |
 | `POST` | `/api/reportes/consultar`     | Consulta por ticket + cédula (POST evita la CI en logs/URL). |
-| `GET`  | `/api/materias?q=`            | Catálogo activo, con búsqueda opcional.          |
-| `GET`  | `/api/salud`                  | Diagnóstico: variables, Supabase y materias.     |
+| `GET`  | `/api/salud`                  | Diagnóstico: variables, Supabase y catálogo local. |
 
 Contrato de error:
 
@@ -212,8 +240,28 @@ Contrato de error:
 }
 ```
 
-Códigos: `validacion`, `verificacion`, `duplicado`, `limite`, `materia`,
+Códigos: `validacion`, `verificacion`, `duplicado`, `limite`,
 `no_encontrado`, `interno`.
+
+Cuerpo de `POST /api/reportes` (el servidor resuelve `nrc` y `materia_nombre`
+desde la malla local):
+
+```json
+{
+  "ci": "12345678",
+  "nombre": "Ana Martínez",
+  "correo": "ana@universidad.edu.ve",
+  "materia_codigo": "TELE-02002",
+  "tipo_error": "otro",
+  "tipo_error_detalle": "La sección no aparece en mi reserva",
+  "motivo": "Describe el problema (15 a 600 caracteres).",
+  "verificacionToken": "..."
+}
+```
+
+`materia_codigo` debe existir en la malla local; si `tipo_error` es `otro`,
+`tipo_error_detalle` es obligatorio y de máximo 100 caracteres (en los demás
+tipos se ignora).
 
 ### Diagnóstico rápido
 
@@ -223,11 +271,10 @@ Códigos: `validacion`, `verificacion`, `duplicado`, `limite`, `materia`,
 - que `SUPABASE_SERVICE_ROLE_KEY` sea la clave `service_role`;
 - que exista `NEXT_PUBLIC_SUPABASE_ANON_KEY`;
 - que `VERIFICACION_SECRET` tenga al menos 32 caracteres;
-- que existan las tablas `materias`, `reportes`, `reporte_eventos`,
+- que existan las tablas `reportes`, `reporte_eventos`,
   `codigos_verificacion`, `consulta_intentos` y `administradores`;
-- que la tabla `materias` responda y cuántas materias activas tiene;
-- que la consulta exacta de `/api/materias`
-  (`nrc, nombre, docente, horario, aula`) funcione.
+- cuántas materias tiene el catálogo local (`lib/materias/index.ts`) y cuántos
+  reportes hay registrados.
 
 Además devuelve:
 
@@ -235,23 +282,18 @@ Además devuelve:
   secreto; sirve para comparar local y producción.
 - `fuenteUrl`: `SUPABASE_URL` o `NEXT_PUBLIC_SUPABASE_URL`, según cuál se usó.
   Recuerda que `SUPABASE_URL` tiene prioridad en el servidor.
-- Si la consulta del catálogo falla: `codigo`, `columna` y `pista` con la
-  migración que hay que ejecutar.
 
-Si `ok` es `false`, el campo `mensaje` indica qué revisar. Los fallos de
-`/api/materias` también aparecen en los logs de Vercel con el prefijo
-`[materias]`.
+Si `ok` es `false`, el campo `mensaje` indica qué revisar. Los fallos también
+aparecen en los logs de Vercel con el prefijo `[api/salud]`.
 
-> Si `/api/salud` dice `ok: true` con `materias: 0` pero `/api/materias` responde
-> 503, la tabla existe pero **no tiene las columnas que espera la app**: ejecuta
-> `supabase/setup.sql` (incluye `0005`) en el proyecto que muestra `proyecto`.
-> Si el `proyecto` no es el mismo donde corriste el seed, revisa las variables
-> de Vercel (sobre todo un `SUPABASE_URL` viejo).
+> Si los reportes fallan con un error de columna (`materia_codigo` o
+> `tipo_error_detalle` inexistentes) o de CHECK de `tipo_error`, ejecuta
+> `supabase/migrations/0006_malla_local.sql` en el proyecto que muestra
+> `proyecto`.
 
 ### Comprobaciones en Supabase
 
-Si `/api/salud` responde `ok: false` o `/api/materias` devuelve 503, revisa en
-el SQL Editor:
+Si `/api/salud` responde `ok: false`, revisa en el SQL Editor:
 
 ```sql
 -- ¿Existen todas las tablas?
@@ -260,30 +302,16 @@ from information_schema.tables
 where table_schema = 'public'
 order by table_name;
 
--- ¿Hay catálogo activo?
-select count(*) as total, count(*) filter (where activo) as activas
-from public.materias;
-
--- ¿La tabla materias tiene las columnas que usa la app?
-select column_name
-from information_schema.columns
-where table_schema = 'public' and table_name = 'materias'
-order by ordinal_position;
-
 -- ¿Existen las funciones que usa la app?
 select proname
 from pg_proc
 where proname in (
-  'registrar_reporte',
   'registrar_intento_codigo',
   'consumir_codigo',
   'cambiar_estado_reporte',
   'limpiar_codigos_vencidos'
 )
 order by proname;
-
--- ¿Qué versión de registrar_reporte está aplicada? (debe decir America/Caracas)
-select prosrc from pg_proc where proname = 'registrar_reporte';
 
 -- ¿Quedaron restricciones viejas?
 select conname, pg_get_constraintdef(oid)
@@ -296,24 +324,45 @@ completo. Es idempotente.
 
 ## Modelo de datos
 
-- `materias`: catálogo (`nrc` PK, nombre, docente, horario, aula, activo).
-- `reportes`: reporte con copia del nombre/aula de la materia al momento del
-  envío, ticket único, estado y fechas.
+- Catálogo local: `lib/materias/index.ts` (código, NRC, materia, prelaciones y
+  horario por defecto). No se guarda en la base de datos.
+- `reportes`: ticket único, datos del usuario, la materia (`nrc` visible,
+  `materia_codigo` único de la malla y `materia_nombre` como snapshot; sin aula
+  ni horario), `tipo_error`, `tipo_error_detalle` (solo para «otro», máx. 100),
+  `motivo`, `estado` y fechas.
 - `reporte_eventos`: historial de cambios de estado.
 - `codigos_verificacion`: hash del código, expiración, intentos, consumo e IP
   hasheada.
 - `consulta_intentos`: consultas fallidas por IP (límite de fuerza bruta).
 - `administradores`: usuarios de Supabase Auth autorizados en `/admin`.
 
-RLS está activo en todas las tablas. Solo `materias` tiene lectura pública; el
-resto queda denegado para `anon` y `authenticated`. La API usa `service_role`.
+Esquema final de `public.reportes`:
+
+| Columna              | Tipo          | Notas                                        |
+| -------------------- | ------------- | -------------------------------------------- |
+| `id`                 | `uuid`        | PK                                           |
+| `ticket`             | `text`        | único, formato `TK-XXXXXX`                   |
+| `ci`                 | `text`        | 7 a 8 dígitos                                |
+| `nombre`             | `text`        |                                              |
+| `correo`             | `text`        |                                              |
+| `nrc`                | `text`        | `nroCurso` visible (se repite entre carreras) |
+| `materia_codigo`     | `text`        | código único de la malla local               |
+| `materia_nombre`     | `text`        | snapshot                                     |
+| `tipo_error`         | `text`        | CHECK con los seis slugs                     |
+| `tipo_error_detalle` | `text`        | solo «otro», máximo 100                      |
+| `motivo`             | `text`        | 15 a 600 caracteres                          |
+| `estado`             | `text`        | `pendiente`, `en-revision`, `resuelto`       |
+| `creado_en`          | `timestamptz` |                                              |
+| `actualizado_en`     | `timestamptz` |                                              |
+
+RLS está activo en todas las tablas. El acceso queda denegado para `anon` y
+`authenticated`; la API usa `service_role`.
 
 ## Estructura
 
 ```
 app/
   api/
-    materias/route.ts
     reportes/route.ts
     reportes/consultar/route.ts
     salud/route.ts
@@ -322,7 +371,7 @@ app/
   (portal)/
     layout.tsx
     page.tsx
-    reportar/page.tsx            # Server component: catálogo desde Supabase
+    reportar/page.tsx            # Server component: catálogo local
     reportar/ReportarView.tsx
     consultar/page.tsx
     consultar/ConsultarView.tsx
@@ -341,9 +390,10 @@ context/
 lib/
   api/                           # Helpers de route handlers (respuestas, IP)
   api-cliente.ts                 # fetch tipado para el navegador
+  materias/index.ts              # Malla local (MALLA_OFICIAL), tipo Materia
+  materias/buscar.ts             # Búsqueda por código, NRC o nombre (pura)
   supabase/
     admin.ts                     # Cliente service_role (solo servidor)
-    materias.ts                  # Catálogo desde la tabla materias
     reportes.ts
   verificacion-servidor.ts       # Códigos, límites y tokens HMAC
   email.ts                       # Resend / Gmail SMTP
@@ -359,11 +409,9 @@ supabase/
   migrations/0002_auditoria.sql
   migrations/0003_admin.sql
   migrations/0004_permisos.sql
-  migrations/0005_reparar_materias.sql
-  seed.sql
+  migrations/0005_catalogo_local.sql
+  migrations/0006_malla_local.sql
   setup.sql
-data/
-  materias.csv
 ```
 
 ## Seguridad
@@ -372,8 +420,8 @@ data/
 - `0004_permisos.sql` concede a `service_role` los permisos de tabla y
   secuencia que necesita la Data API, aunque la exposición automática esté
   desactivada.
-- La función `registrar_reporte` es `security definer` y tiene `EXECUTE`
-  revocado para `anon`/`authenticated`.
+- La escritura de reportes se hace con `service_role`; las funciones SQL de
+  verificación tienen `EXECUTE` revocado para `anon`/`authenticated`.
 - El token de verificación queda ligado a una cédula (una cédula puede tener
   varios tokens; un token sirve para una sola cédula).
 - Tokens HMAC con expiración; códigos guardados como hash, con límite de

@@ -10,15 +10,17 @@ import { ReporteTabs, type TabKey } from "@/components/ReporteTabs";
 import { ResumenReportes } from "@/components/ResumenReportes";
 import { ArrowRightIcon, ClockIcon } from "@/components/icons";
 import { CONFIG } from "@/lib/config";
-import type { Materia } from "@/lib/types";
+import type { Materia } from "@/lib/materias";
+
+interface ReportarViewProps {
+  materias: Materia[];
+  errorCatalogo: string | null;
+}
 
 export function ReportarView({
   materias,
   errorCatalogo,
-}: {
-  materias: Materia[];
-  errorCatalogo: string | null;
-}) {
+}: ReportarViewProps) {
   const [tabActiva, setTabActiva] = useState<TabKey>("formulario");
 
   return (

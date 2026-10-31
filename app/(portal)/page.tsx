@@ -13,21 +13,21 @@ import { CONFIG } from "@/lib/config";
 
 const CLASES_EJEMPLO = [
   {
-    hora: "08:00",
-    materia: "Cálculo Diferencial",
-    aula: "B-204",
+    hora: "07:00",
+    materia: "Álgebra y Trigonometría",
+    nrc: "02002",
     color: "border-indigo-200 bg-indigo-50 text-indigo-700",
   },
   {
-    hora: "10:00",
-    materia: "Base de Datos",
-    aula: "A-310",
+    hora: "09:00",
+    materia: "Lógica",
+    nrc: "02009",
     color: "border-sky-200 bg-sky-50 text-sky-700",
   },
   {
     hora: "14:00",
-    materia: "Ingeniería de Software",
-    aula: "C-401",
+    materia: "Álgebra Lineal",
+    nrc: "02101",
     color: "border-violet-200 bg-violet-50 text-violet-700",
   },
 ];
@@ -36,7 +36,7 @@ const PASOS = [
   {
     titulo: "Completa tus datos",
     descripcion:
-      "Identifica la materia por NRC, describe el problema y verifica tu correo.",
+      "Elige la materia de la malla, indica el tipo de error y verifica tu correo.",
   },
   {
     titulo: "Validamos el reporte",
@@ -76,7 +76,7 @@ export default function HomePage() {
             </h1>
 
             <p className="mt-4 max-w-xl text-sm leading-6 text-slate-600 sm:text-base sm:leading-7">
-              Reporta inconsistencias de día, aula o docente. Recibirás un
+              Reporta errores de prerrequisito, correquisito, reservas o cruces de horario. Recibirás un
               ticket único para consultar el avance de tu caso sin escribir
               correos sueltos.
             </p>
@@ -147,7 +147,7 @@ export default function HomePage() {
                       <p className="truncate text-xs font-semibold">
                         {clase.materia}
                       </p>
-                      <p className="text-[10px] opacity-75">Aula {clase.aula}</p>
+                      <p className="text-[10px] opacity-75">NRC {clase.nrc}</p>
                     </div>
                   </div>
                 ))}
@@ -155,7 +155,7 @@ export default function HomePage() {
 
               <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-2 text-[10px] font-medium text-amber-700">
                 <span className="size-1.5 rounded-full bg-amber-400" />
-                Un aula por confirmar
+                Un horario por confirmar
               </div>
             </div>
           </div>

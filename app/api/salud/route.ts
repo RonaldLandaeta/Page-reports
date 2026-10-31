@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { contarMaterias } from "@/lib/materias";
 import {
   claveAnonima,
   claveServiceRole,
@@ -16,7 +17,6 @@ export const dynamic = "force-dynamic";
 const SIN_CACHE = { "Cache-Control": "no-store" };
 
 const TABLAS = [
-  "materias",
   "reportes",
   "reporte_eventos",
   "codigos_verificacion",
@@ -33,33 +33,6 @@ function comprobar(comprobacion: () => unknown): boolean {
   } catch {
     return false;
   }
-}
-
-/** Nombre de la columna que PostgREST dice que falta, si aplica. */
-function columnaFaltante(mensaje: string): string | null {
-  const coincidencia = mensaje.match(/column "?([\w.]+)"? does not exist/i);
-  return coincidencia?.[1] ?? null;
-}
-
-/** Traduce el error de PostgREST a la migración que hay que ejecutar. */
-function pistaCatalogo(codigo: string, mensaje: string): string {
-  if (codigo === "42703" || codigo === "PGRST204") {
-    return "Faltan columnas en public.materias. Ejecuta supabase/migrations/0005_reparar_materias.sql (o el setup.sql completo) en el proyecto que usa Vercel.";
-  }
-
-  if (codigo === "42501" || codigo === "PGRST301") {
-    return "La Data API no tiene permisos sobre public.materias. Ejecuta supabase/migrations/0004_permisos.sql.";
-  }
-
-  if (codigo === "42P01" || codigo === "PGRST205") {
-    return "No existe public.materias en este proyecto. Ejecuta supabase/setup.sql.";
-  }
-
-  if (/schema cache/i.test(mensaje)) {
-    return "PostgREST conserva la caché vieja. Ejecuta `notify pgrst, 'reload schema';` en el SQL Editor.";
-  }
-
-  return "Revisa los logs de Vercel y ejecuta supabase/setup.sql en el proyecto configurado.";
 }
 
 async function comprobarTablas(
@@ -86,9 +59,9 @@ async function comprobarTablas(
 }
 
 /**
- * Diagnóstico de despliegue: comprueba variables, tablas y la consulta real del
- * catálogo. No devuelve claves; sí el host del proyecto y, si falla, el código
- * de error y la columna que falta (información de esquema, no secreta).
+ * Diagnóstico de despliegue: comprueba variables y tablas de Supabase. El
+ * catálogo de materias es local, así que solo se informa su tamaño. No devuelve
+ * claves; sí el host del proyecto.
  */
 export async function GET() {
   const estado = {
@@ -133,54 +106,19 @@ export async function GET() {
           tablas,
           faltantes,
           materias: null,
-          mensaje: `Faltan tablas en Supabase: ${faltantes.join(", ")}. Ejecuta supabase/setup.sql completo.`,
+          mensaje: `Faltan tablas en Supabase: ${faltantes.join(", ")}. Ejecuta las migraciones de supabase/migrations en orden.`,
         },
         { status: 503, headers: SIN_CACHE },
       );
     }
 
     const { count, error } = await supabase
-      .from("materias")
-      .select("nrc", { count: "exact", head: true })
-      .eq("activo", true);
+      .from("reportes")
+      .select("id", { count: "exact", head: true });
 
     if (error) throw error;
 
-    // Misma consulta que `listarMaterias()`: si aquí falla, /api/materias
-    // devolverá 503 aunque la tabla exista.
-    const { error: errorCatalogo } = await supabase
-      .from("materias")
-      .select("nrc, nombre, docente, horario, aula")
-      .eq("activo", true)
-      .limit(1);
-
-    if (errorCatalogo) {
-      console.error(
-        "[api/salud] la consulta del catálogo falló:",
-        errorCatalogo.message,
-      );
-
-      return NextResponse.json(
-        {
-          ok: false,
-          supabase: estado,
-          proyecto,
-          fuenteUrl,
-          tablas,
-          faltantes: [],
-          materias: count ?? 0,
-          codigo: errorCatalogo.code ?? null,
-          columna: columnaFaltante(errorCatalogo.message),
-          mensaje:
-            "public.materias existe, pero la consulta que usa la app falla. Por eso /api/materias responde 503.",
-          pista: pistaCatalogo(
-            errorCatalogo.code ?? "",
-            errorCatalogo.message,
-          ),
-        },
-        { status: 503, headers: SIN_CACHE },
-      );
-    }
+    const totalMaterias = contarMaterias();
 
     return NextResponse.json(
       {
@@ -190,16 +128,17 @@ export async function GET() {
         fuenteUrl,
         tablas,
         faltantes: [],
-        materias: count ?? 0,
+        materias: totalMaterias,
+        reportes: count ?? 0,
         mensaje:
-          (count ?? 0) > 0
-            ? "Supabase responde y el catálogo tiene materias activas."
-            : "Supabase responde, pero no hay materias activas. Ejecuta supabase/seed.sql.",
+          totalMaterias > 0
+            ? "Supabase responde y el catálogo local tiene materias."
+            : "El catálogo local (lib/materias) está vacío.",
       },
       { headers: SIN_CACHE },
     );
   } catch (error) {
-    console.error("[api/salud] no se pudo consultar materias.", error);
+    console.error("[api/salud] no se pudo consultar Supabase.", error);
 
     return NextResponse.json(
       {
@@ -211,7 +150,7 @@ export async function GET() {
         faltantes: null,
         materias: null,
         mensaje:
-          "Supabase está configurado, pero la consulta a materias falló. Revisa los logs y los permisos de la Data API.",
+          "Supabase está configurado, pero la consulta falló. Revisa los logs y los permisos de la Data API.",
       },
       { status: 503, headers: SIN_CACHE },
     );

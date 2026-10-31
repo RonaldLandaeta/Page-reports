@@ -138,8 +138,8 @@ export async function enviarConfirmacionReporte(reporte: Reporte) {
     `Hola ${reporte.nombre},`,
     "",
     `Recibimos tu reporte ${reporte.ticket}.`,
-    `Materia: ${reporte.materiaNombre} (NRC ${reporte.nrc})`,
-    `Tipo de error: ${getTipoErrorLabel(reporte.tipo_error)}`,
+    `Materia: ${reporte.materiaNombre} (NRC ${reporte.nrc}, código ${reporte.materiaCodigo})`,
+    `Tipo de error: ${getTipoErrorLabel(reporte.tipo_error)}${reporte.tipoErrorDetalle ? ` — ${reporte.tipoErrorDetalle}` : ""}`,
     `Estado inicial: pendiente de revisión`,
     "",
     "Guarda el ticket. Lo necesitarás junto con tu cédula para consultar el estado.",
@@ -156,8 +156,8 @@ export async function enviarConfirmacionReporte(reporte: Reporte) {
       </p>
       <table style="width:100%;font-size:14px;line-height:22px;color:#334155;border-collapse:collapse">
         <tr><td style="padding:6px 0;color:#64748b">Materia</td><td style="padding:6px 0;text-align:right;font-weight:600">${escaparHtml(reporte.materiaNombre)}</td></tr>
-        <tr><td style="padding:6px 0;color:#64748b">NRC</td><td style="padding:6px 0;text-align:right;font-weight:600">${escaparHtml(reporte.nrc)}</td></tr>
-        <tr><td style="padding:6px 0;color:#64748b">Tipo de error</td><td style="padding:6px 0;text-align:right;font-weight:600">${escaparHtml(getTipoErrorLabel(reporte.tipo_error))}</td></tr>
+        <tr><td style="padding:6px 0;color:#64748b">NRC</td><td style="padding:6px 0;text-align:right;font-weight:600">${escaparHtml(reporte.nrc)} · ${escaparHtml(reporte.materiaCodigo)}</td></tr>
+        <tr><td style="padding:6px 0;color:#64748b">Tipo de error</td><td style="padding:6px 0;text-align:right;font-weight:600">${escaparHtml(getTipoErrorLabel(reporte.tipo_error))}${reporte.tipoErrorDetalle ? ` — ${escaparHtml(reporte.tipoErrorDetalle)}` : ""}</td></tr>
         <tr><td style="padding:6px 0;color:#64748b">Estado</td><td style="padding:6px 0;text-align:right;font-weight:600">Pendiente de revisión</td></tr>
       </table>
       <p style="font-size:13px;line-height:20px;color:#64748b;margin:20px 0 0">

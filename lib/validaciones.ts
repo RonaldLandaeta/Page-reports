@@ -12,6 +12,9 @@ export const MOTIVO_MAX = 600;
 export const NOMBRE_MIN = 3;
 export const NOMBRE_MAX = 120;
 
+/** «Especifica el error» (solo tipo "otro"). Debe coincidir con el CHECK de SQL. */
+export const DETALLE_ERROR_MAX = 100;
+
 export function esCedulaValida(ci: string): boolean {
   const valor = ci.trim();
 

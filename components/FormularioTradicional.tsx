@@ -3,13 +3,18 @@
 import { useState, type FormEvent } from "react";
 
 import { useReportes } from "@/context/ReportesContext";
-import { TIPOS_ERROR, esTipoError } from "@/lib/catalogos";
+import {
+  TIPOS_ERROR,
+  esTipoError,
+  tipoRequiereDetalle,
+} from "@/lib/catalogos";
 import { CONFIG } from "@/lib/config";
-import { MALLA_OFICIAL, type MateriaOficial } from "@/lib/materias";
+import type { Materia } from "@/lib/materias";
 import type { Reporte, TipoError } from "@/lib/types";
 import {
   CEDULA_MAX_DIGITOS,
   CEDULA_MIN_DIGITOS,
+  DETALLE_ERROR_MAX,
   MOTIVO_MAX,
   MOTIVO_MIN,
   NOMBRE_MIN,
@@ -30,8 +35,11 @@ interface FormState {
   ci: string;
   nombre: string;
   correo: string;
-  nrc: string;
+  /** Código único de la malla (value del select). */
+  materia_codigo: string;
   tipo_error: "" | TipoError;
+  /** «Especifica el error»: solo visible y obligatorio para "otro". */
+  tipo_error_detalle: string;
   motivo: string;
 }
 
@@ -42,8 +50,9 @@ const FORMULARIO_INICIAL: FormState = {
   ci: "",
   nombre: "",
   correo: "",
-  nrc: "",
+  materia_codigo: "",
   tipo_error: "",
+  tipo_error_detalle: "",
   motivo: "",
 };
 
@@ -73,7 +82,15 @@ function ErrorCampo({ id, mensaje }: { id: string; mensaje?: string }) {
   );
 }
 
-export function FormularioTradicional() {
+interface FormularioTradicionalProps {
+  materias: Materia[];
+  errorCatalogo: string | null;
+}
+
+export function FormularioTradicional({
+  materias,
+  errorCatalogo,
+}: FormularioTradicionalProps) {
   const { registrarReporte } = useReportes();
 
   const [formulario, setFormulario] = useState<FormState>(FORMULARIO_INICIAL);
@@ -84,9 +101,10 @@ export function FormularioTradicional() {
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
-  const materiaSeleccionada = MALLA_OFICIAL.find(
-    (materia) => materia.codigo === formulario.nrc || materia.nroCurso === formulario.nrc,
+  const materiaSeleccionada = materias.find(
+    (materia) => materia.codigo === formulario.materia_codigo,
   );
+  const pideDetalle = tipoRequiereDetalle(formulario.tipo_error);
 
   function actualizar<K extends CampoFormulario>(
     campo: K,
@@ -97,6 +115,10 @@ export function FormularioTradicional() {
     setFormulario((previo) => {
       const siguiente: FormState = { ...previo };
       siguiente[campo] = valor;
+      // El detalle solo existe para "otro": al cambiar de tipo se descarta.
+      if (campo === "tipo_error" && !tipoRequiereDetalle(String(valor))) {
+        siguiente.tipo_error_detalle = "";
+      }
       return siguiente;
     });
 
@@ -151,12 +173,20 @@ export function FormularioTradicional() {
       nuevosErrores.correo = "Verifica tu correo antes de enviar el reporte.";
     }
 
-    if (!MALLA_OFICIAL.some((materia) => materia.codigo === formulario.nrc || materia.nroCurso === formulario.nrc)) {
-      nuevosErrores.nrc = "Selecciona una materia válida de la malla.";
+    if (!materias.some((materia) => materia.codigo === formulario.materia_codigo)) {
+      nuevosErrores.materia_codigo = "Selecciona una materia válida de la malla.";
     }
 
     if (!esTipoError(formulario.tipo_error)) {
       nuevosErrores.tipo_error = "Selecciona el tipo de error.";
+    } else if (tipoRequiereDetalle(formulario.tipo_error)) {
+      const detalle = formulario.tipo_error_detalle.trim();
+
+      if (detalle.length === 0) {
+        nuevosErrores.tipo_error_detalle = "Especifica el error.";
+      } else if (detalle.length > DETALLE_ERROR_MAX) {
+        nuevosErrores.tipo_error_detalle = `Máximo ${DETALLE_ERROR_MAX} caracteres.`;
+      }
     }
 
     if (motivo.length < MOTIVO_MIN) {
@@ -199,8 +229,11 @@ export function FormularioTradicional() {
         ci: formulario.ci.trim(),
         nombre: formulario.nombre.trim(),
         correo: formulario.correo.trim().toLowerCase(),
-        nrc: formulario.nrc,
+        materia_codigo: formulario.materia_codigo,
         tipo_error: formulario.tipo_error,
+        tipo_error_detalle: tipoRequiereDetalle(formulario.tipo_error)
+          ? formulario.tipo_error_detalle.trim().replace(/\s+/g, " ")
+          : "",
         motivo: formulario.motivo.trim(),
         verificacionToken: verificacion.token,
       });
@@ -227,6 +260,8 @@ export function FormularioTradicional() {
       setEnviando(false);
     }
   }
+
+  const catalogoVacio = materias.length === 0;
 
   return (
     <>
@@ -259,6 +294,19 @@ export function FormularioTradicional() {
           onSubmit={handleSubmit}
           className="space-y-5 px-5 py-6 sm:px-6"
         >
+          {catalogoVacio && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+            >
+              <AlertIcon className="mt-0.5 size-4 shrink-0" />
+              <p>
+                {errorCatalogo ??
+                  "El catálogo de materias está vacío. Avisa al administrador para que cargue las materias antes de reportar."}
+              </p>
+            </div>
+          )}
+
           {errorEnvio && (
             <div
               role="alert"
@@ -366,29 +414,41 @@ export function FormularioTradicional() {
           <div className="grid gap-5 sm:grid-cols-2">
             <div>
               <label
-                htmlFor="nrc"
+                htmlFor="materia_codigo"
                 className="mb-1.5 block text-sm font-medium text-slate-700"
               >
                 Materia <span className="text-rose-500">*</span>
               </label>
               <select
-                id="nrc"
-                name="nrc"
-                value={formulario.nrc}
-                onChange={(event) => actualizar("nrc", event.target.value)}
+                id="materia_codigo"
+                name="materia_codigo"
+                value={formulario.materia_codigo}
+                onChange={(event) =>
+                  actualizar("materia_codigo", event.target.value)
+                }
                 required
-                aria-invalid={Boolean(errores.nrc)}
-                aria-describedby={errores.nrc ? "nrc-error" : undefined}
-                className={claseControl(Boolean(errores.nrc))}
+                disabled={catalogoVacio}
+                aria-invalid={Boolean(errores.materia_codigo)}
+                aria-describedby={
+                  errores.materia_codigo ? "materia_codigo-error" : undefined
+                }
+                className={claseControl(Boolean(errores.materia_codigo))}
               >
-                <option value="">Selecciona una materia</option>
-                {MALLA_OFICIAL.map((materia) => (
+                <option value="">
+                  {catalogoVacio
+                    ? "Catálogo no disponible"
+                    : "Selecciona una materia"}
+                </option>
+                {materias.map((materia) => (
                   <option key={materia.codigo} value={materia.codigo}>
-                    [{materia.codigo}] {materia.materia}
+                    [{materia.nrc}] {materia.nombre}
                   </option>
                 ))}
               </select>
-              <ErrorCampo id="nrc-error" mensaje={errores.nrc} />
+              <ErrorCampo
+                id="materia_codigo-error"
+                mensaje={errores.materia_codigo}
+              />
             </div>
 
             <div>
@@ -435,16 +495,53 @@ export function FormularioTradicional() {
               <p className="flex items-center gap-2">
                 <ClockIcon className="size-4 shrink-0 text-indigo-500" />
                 <span>
-                  <span className="font-semibold">Horario por defecto:</span>{" "}
-                  {materiaSeleccionada.horarioDefecto}
+                  <span className="font-semibold">Horario actual:</span>{" "}
+                  {materiaSeleccionada.horario || "No registrado"}
                 </span>
               </p>
-              {materiaSeleccionada.prelaciones.length > 0 && (
-                <p className="pl-6 sm:pl-0">
-                  <span className="font-semibold">Prelaciones:</span>{" "}
-                  {materiaSeleccionada.prelaciones.join(", ")}
-                </p>
-              )}
+              <p className="font-mono text-[11px] text-indigo-700/80">
+                {materiaSeleccionada.codigo}
+              </p>
+            </div>
+          )}
+
+          {pideDetalle && (
+            <div>
+              <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                <label
+                  htmlFor="tipo_error_detalle"
+                  className="block text-sm font-medium text-slate-700"
+                >
+                  Especifica el error <span className="text-rose-500">*</span>
+                </label>
+                <span className="text-[11px] tabular-nums text-slate-400">
+                  {formulario.tipo_error_detalle.length}/{DETALLE_ERROR_MAX}
+                </span>
+              </div>
+              <input
+                id="tipo_error_detalle"
+                name="tipo_error_detalle"
+                type="text"
+                autoComplete="off"
+                maxLength={DETALLE_ERROR_MAX}
+                placeholder="Ej. La materia no aparece en mi reserva"
+                value={formulario.tipo_error_detalle}
+                onChange={(event) =>
+                  actualizar("tipo_error_detalle", event.target.value)
+                }
+                required
+                aria-invalid={Boolean(errores.tipo_error_detalle)}
+                aria-describedby={
+                  errores.tipo_error_detalle
+                    ? "tipo_error_detalle-error"
+                    : undefined
+                }
+                className={claseControl(Boolean(errores.tipo_error_detalle))}
+              />
+              <ErrorCampo
+                id="tipo_error_detalle-error"
+                mensaje={errores.tipo_error_detalle}
+              />
             </div>
           )}
 

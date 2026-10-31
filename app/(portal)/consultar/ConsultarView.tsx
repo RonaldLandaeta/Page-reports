@@ -318,14 +318,16 @@ export function ConsultarView() {
               <Dato etiqueta="Materia">
                 {reporte.materiaNombre}
                 <span className="mt-0.5 block text-xs font-normal text-slate-500">
-                  NRC {reporte.nrc}
+                  NRC {reporte.nrc} · {reporte.materiaCodigo}
                 </span>
-              </Dato>
-              <Dato etiqueta="Aula">
-                {reporte.materiaAula || "No registrada"}
               </Dato>
               <Dato etiqueta="Tipo de error">
                 {getTipoErrorLabel(reporte.tipo_error)}
+                {reporte.tipoErrorDetalle && (
+                  <span className="mt-0.5 block break-words text-xs font-normal text-slate-500">
+                    {reporte.tipoErrorDetalle}
+                  </span>
+                )}
               </Dato>
               <Dato etiqueta="Fecha de registro">
                 {formatoFecha.format(new Date(reporte.creadoEn))}
