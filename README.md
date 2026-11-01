@@ -4,13 +4,6 @@ Aplicación web para reportar problemas de horarios académicos y consultar su
 estado. Frontend en Next.js (App Router), React y Tailwind CSS; backend en
 Supabase (Postgres + RLS) y correo transaccional con Resend o Gmail SMTP.
 
-## Rutas
-
-| Ruta         | Descripción                                                          |
-| ------------ | -------------------------------------------------------------------- |
-| `/`          | Inicio, accesos a reportar y consultar.                              |
-| `/reportar`  | Formulario tradicional, chatbot interactivo, resumen y consola JSON. |
-| `/consultar` | Consulta de un reporte mediante ticket + cédula.                     |
 
 ## Arquitectura
 
