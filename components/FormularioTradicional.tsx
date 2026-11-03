@@ -46,6 +46,14 @@ interface FormState {
 type CampoFormulario = keyof FormState;
 type Errores = Partial<Record<CampoFormulario, string>>;
 
+/** Datos que se conservan para crear un ticket nuevo sin volver a escribirlos. */
+interface DatosParaOtroReporte {
+  ci: string;
+  nombre: string;
+  correo: string;
+  verificacion: VerificacionAprobada;
+}
+
 const FORMULARIO_INICIAL: FormState = {
   ci: "",
   nombre: "",
@@ -58,6 +66,22 @@ const FORMULARIO_INICIAL: FormState = {
 
 const ESTILO_CONTROL =
   "w-full rounded-xl border bg-white dark:bg-slate-900 px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100 transition-colors placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:text-slate-500";
+
+/** Lee la expiración del token firmado (no valida la firma en el cliente). */
+function verificacionVigente(verificacion: VerificacionAprobada): boolean {
+  try {
+    const [cuerpo] = verificacion.token.split(".");
+    if (!cuerpo) return false;
+
+    const base64 = cuerpo.replace(/-/g, "+").replace(/_/g, "/");
+    const relleno = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const payload = JSON.parse(atob(relleno)) as { e?: unknown };
+
+    return typeof payload.e === "number" && payload.e * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+}
 
 function claseControl(invalido: boolean): string {
   return `${ESTILO_CONTROL} ${
@@ -100,6 +124,9 @@ export function FormularioTradicional({
     useState<VerificacionAprobada | null>(null);
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [ultimoEnvio, setUltimoEnvio] = useState<DatosParaOtroReporte | null>(
+    null,
+  );
 
   const materiaSeleccionada = materias.find(
     (materia) => materia.codigo === formulario.materia_codigo,
@@ -248,6 +275,12 @@ export function FormularioTradicional({
       }
 
       setReporteCreado(resultado.reporte);
+      setUltimoEnvio({
+        ci: formulario.ci.trim(),
+        nombre: formulario.nombre.trim(),
+        correo: formulario.correo.trim().toLowerCase(),
+        verificacion,
+      });
       setFormulario(FORMULARIO_INICIAL);
       setErrores({});
       setVerificacion(null);
@@ -262,6 +295,39 @@ export function FormularioTradicional({
   }
 
   const catalogoVacio = materias.length === 0;
+
+  function cerrarModalExito() {
+    setReporteCreado(null);
+    setUltimoEnvio(null);
+  }
+
+  /**
+   * Cierra el modal y reutiliza los datos personales y la verificación del
+   * ticket recién creado. Los campos propios del reporte quedan vacíos.
+   */
+  function hacerOtroReporte() {
+    if (ultimoEnvio) {
+      setFormulario({
+        ...FORMULARIO_INICIAL,
+        ci: ultimoEnvio.ci,
+        nombre: ultimoEnvio.nombre,
+        correo: ultimoEnvio.correo,
+      });
+      setVerificacion(
+        verificacionVigente(ultimoEnvio.verificacion)
+          ? ultimoEnvio.verificacion
+          : null,
+      );
+      setErrores({});
+      setErrorEnvio(null);
+    }
+
+    cerrarModalExito();
+
+    requestAnimationFrame(() => {
+      document.getElementById("materia_codigo")?.focus();
+    });
+  }
 
   return (
     <>
@@ -406,6 +472,11 @@ export function FormularioTradicional({
                 key={`${formulario.correo}|${formulario.ci}`}
                 correo={formulario.correo}
                 ci={formulario.ci.trim()}
+                verificadaInicialmente={
+                  verificacion?.correo ===
+                    formulario.correo.trim().toLowerCase() &&
+                  verificacion.ci === formulario.ci.trim()
+                }
                 onVerifiedChange={manejarVerificacion}
               />
             )}
@@ -619,7 +690,8 @@ export function FormularioTradicional({
       {reporteCreado && (
         <ModalExito
           reporte={reporteCreado}
-          onClose={() => setReporteCreado(null)}
+          onClose={cerrarModalExito}
+          onHacerOtro={hacerOtroReporte}
         />
       )}
     </>

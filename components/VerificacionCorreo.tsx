@@ -18,6 +18,8 @@ interface VerificacionCorreoProps {
   correo: string;
   /** Cédula a la que queda ligado el token (una cédula, varios tokens). */
   ci: string;
+  /** Si el correo ya fue verificado para esta cédula (p. ej. al hacer otro reporte). */
+  verificadaInicialmente?: boolean;
   onVerifiedChange: (verificacion: VerificacionAprobada | null) => void;
 }
 
@@ -30,10 +32,13 @@ type Fase = "inicial" | "enviando" | "enviado" | "validando" | "verificado";
 export function VerificacionCorreo({
   correo,
   ci,
+  verificadaInicialmente = false,
   onVerifiedChange,
 }: VerificacionCorreoProps) {
   const normalizado = correo.trim().toLowerCase();
-  const [fase, setFase] = useState<Fase>("inicial");
+  const [fase, setFase] = useState<Fase>(
+    verificadaInicialmente ? "verificado" : "inicial",
+  );
   const [codigo, setCodigo] = useState("");
   const [codigoDemo, setCodigoDemo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

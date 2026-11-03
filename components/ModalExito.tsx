@@ -12,15 +12,22 @@ import {
   CheckIcon,
   CloseIcon,
   CopyIcon,
+  DocumentIcon,
   MailIcon,
 } from "./icons";
 
 interface ModalExitoProps {
   reporte: Reporte;
   onClose: () => void;
+  /** Cierra el modal y prepara el formulario con los datos anteriores. */
+  onHacerOtro: () => void;
 }
 
-export function ModalExito({ reporte, onClose }: ModalExitoProps) {
+export function ModalExito({
+  reporte,
+  onClose,
+  onHacerOtro,
+}: ModalExitoProps) {
   const [copiado, setCopiado] = useState(false);
   const cerrarRef = useRef<HTMLButtonElement>(null);
   // Ref para que un onClose nuevo en cada render no reinicie foco ni scroll.
@@ -177,13 +184,27 @@ export function ModalExito({ reporte, onClose }: ModalExitoProps) {
         </div>
 
         <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 px-6 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:bg-indigo-800"
-          >
-            Entendido
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={onHacerOtro}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <DocumentIcon className="size-4" />
+              Hacer otro reporte
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:bg-indigo-800"
+            >
+              Entendido
+            </button>
+          </div>
+          <p className="mt-2 text-center text-[11px] leading-4 text-slate-500 dark:text-slate-400">
+            «Hacer otro reporte» conserva tu cédula, nombre, correo y la
+            verificación para agilizar el siguiente ticket.
+          </p>
         </div>
       </div>
     </div>
