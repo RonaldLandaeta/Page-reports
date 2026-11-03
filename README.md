@@ -270,4 +270,8 @@ completo. Es idempotente.
 - Solo correos de `NEXT_PUBLIC_DOMINIOS_CORREO` pueden verificarse.
 - Cabeceras de seguridad en `next.config.ts`.
 - La consola JSON muestra cédula y motivo: en producción está apagada salvo
+<<<<<<< HEAD
   que pongas `NEXT_PUBLIC_MOSTRAR_CONSOLA=true`.
+=======
+  que pongas `NEXT_PUBLIC_MOSTRAR_CONSOLA=true`.
+>>>>>>> origin/main
