@@ -57,13 +57,13 @@ const FORMULARIO_INICIAL: FormState = {
 };
 
 const ESTILO_CONTROL =
-  "w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500";
+  "w-full rounded-xl border bg-white dark:bg-slate-900 px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100 transition-colors placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:text-slate-500";
 
 function claseControl(invalido: boolean): string {
   return `${ESTILO_CONTROL} ${
     invalido
-      ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/10"
-      : "border-slate-300 hover:border-slate-400 focus:border-indigo-500 focus:ring-indigo-500/10"
+      ? "border-rose-400 dark:border-rose-500/60 focus:border-rose-500 focus:ring-rose-500/10"
+      : "border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 focus:border-indigo-500 focus:ring-indigo-500/10"
   }`;
 }
 
@@ -74,7 +74,7 @@ function ErrorCampo({ id, mensaje }: { id: string; mensaje?: string }) {
     <p
       id={id}
       role="alert"
-      className="mt-1.5 flex items-start gap-1.5 text-xs font-medium text-rose-600"
+      className="mt-1.5 flex items-start gap-1.5 text-xs font-medium text-rose-600 dark:text-rose-400"
     >
       <AlertIcon className="mt-px size-3.5 shrink-0" />
       {mensaje}
@@ -267,23 +267,23 @@ export function FormularioTradicional({
     <>
       <section
         aria-labelledby="titulo-formulario"
-        className="rounded-2xl border border-slate-200 bg-white shadow-sm"
+        className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm"
       >
-        <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
+        <div className="border-b border-slate-100 dark:border-slate-800 px-5 py-5 sm:px-6">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2
                 id="titulo-formulario"
-                className="text-lg font-semibold tracking-tight text-slate-900"
+                className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100"
               >
                 Formulario de reporte de horarios
               </h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
+              <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
                 Completa los datos para que podamos identificar y corregir el
                 error en tu horario.
               </p>
             </div>
-            <span className="hidden shrink-0 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100 sm:inline-flex">
+            <span className="hidden shrink-0 rounded-full bg-indigo-50 dark:bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-100 dark:ring-indigo-500/30 sm:inline-flex">
               Paso único
             </span>
           </div>
@@ -297,7 +297,7 @@ export function FormularioTradicional({
           {catalogoVacio && (
             <div
               role="alert"
-              className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+              className="flex items-start gap-2 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-300"
             >
               <AlertIcon className="mt-0.5 size-4 shrink-0" />
               <p>
@@ -310,7 +310,7 @@ export function FormularioTradicional({
           {errorEnvio && (
             <div
               role="alert"
-              className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700"
+              className="flex items-start gap-2 rounded-xl border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-4 py-3 text-sm leading-6 text-rose-700 dark:text-rose-300"
             >
               <AlertIcon className="mt-0.5 size-4 shrink-0" />
               <p>{errorEnvio}</p>
@@ -321,9 +321,9 @@ export function FormularioTradicional({
             <div>
               <label
                 htmlFor="ci"
-                className="mb-1.5 block text-sm font-medium text-slate-700"
+                className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
               >
-                Cédula <span className="text-rose-500">*</span>
+                Cédula <span className="text-rose-500 dark:text-rose-400">*</span>
               </label>
               <input
                 id="ci"
@@ -351,9 +351,9 @@ export function FormularioTradicional({
             <div>
               <label
                 htmlFor="nombre"
-                className="mb-1.5 block text-sm font-medium text-slate-700"
+                className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
               >
-                Nombre <span className="text-rose-500">*</span>
+                Nombre <span className="text-rose-500 dark:text-rose-400">*</span>
               </label>
               <input
                 id="nombre"
@@ -375,9 +375,9 @@ export function FormularioTradicional({
           <div>
             <label
               htmlFor="correo"
-              className="mb-1.5 block text-sm font-medium text-slate-700"
+              className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
             >
-              Correo <span className="text-rose-500">*</span>
+              Correo <span className="text-rose-500 dark:text-rose-400">*</span>
             </label>
             <input
               id="correo"
@@ -394,7 +394,7 @@ export function FormularioTradicional({
             />
             <ErrorCampo id="correo-error" mensaje={errores.correo} />
             {esCorreoValido(formulario.correo) && !esCedulaValida(formulario.ci) && (
-              <p className="mt-1.5 text-[11px] text-slate-500">
+              <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                 Escribe primero tu cédula para poder verificar el correo.
               </p>
             )}
@@ -415,9 +415,9 @@ export function FormularioTradicional({
             <div>
               <label
                 htmlFor="materia_codigo"
-                className="mb-1.5 block text-sm font-medium text-slate-700"
+                className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
               >
-                Materia <span className="text-rose-500">*</span>
+                Materia <span className="text-rose-500 dark:text-rose-400">*</span>
               </label>
               <select
                 id="materia_codigo"
@@ -454,9 +454,9 @@ export function FormularioTradicional({
             <div>
               <label
                 htmlFor="tipo_error"
-                className="mb-1.5 block text-sm font-medium text-slate-700"
+                className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
               >
-                Tipo de error <span className="text-rose-500">*</span>
+                Tipo de error <span className="text-rose-500 dark:text-rose-400">*</span>
               </label>
               <select
                 id="tipo_error"
@@ -491,15 +491,15 @@ export function FormularioTradicional({
           </div>
 
           {materiaSeleccionada && (
-            <div className="flex flex-col gap-2 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-xs text-indigo-900 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2 rounded-xl border border-indigo-100 dark:border-indigo-500/30 bg-indigo-50/60 dark:bg-indigo-500/10 px-4 py-3 text-xs text-indigo-900 dark:text-indigo-200 sm:flex-row sm:items-center sm:justify-between">
               <p className="flex items-center gap-2">
-                <ClockIcon className="size-4 shrink-0 text-indigo-500" />
+                <ClockIcon className="size-4 shrink-0 text-indigo-500 dark:text-indigo-400" />
                 <span>
                   <span className="font-semibold">Horario actual:</span>{" "}
                   {materiaSeleccionada.horario || "No registrado"}
                 </span>
               </p>
-              <p className="font-mono text-[11px] text-indigo-700/80">
+              <p className="font-mono text-[11px] text-indigo-700/80 dark:text-indigo-300/80">
                 {materiaSeleccionada.codigo}
               </p>
             </div>
@@ -510,11 +510,11 @@ export function FormularioTradicional({
               <div className="mb-1.5 flex items-baseline justify-between gap-3">
                 <label
                   htmlFor="tipo_error_detalle"
-                  className="block text-sm font-medium text-slate-700"
+                  className="block text-sm font-medium text-slate-700 dark:text-slate-300"
                 >
-                  Especifica el error <span className="text-rose-500">*</span>
+                  Especifica el error <span className="text-rose-500 dark:text-rose-400">*</span>
                 </label>
-                <span className="text-[11px] tabular-nums text-slate-400">
+                <span className="text-[11px] tabular-nums text-slate-400 dark:text-slate-400">
                   {formulario.tipo_error_detalle.length}/{DETALLE_ERROR_MAX}
                 </span>
               </div>
@@ -549,11 +549,11 @@ export function FormularioTradicional({
             <div className="mb-1.5 flex items-baseline justify-between gap-3">
               <label
                 htmlFor="motivo"
-                className="block text-sm font-medium text-slate-700"
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300"
               >
-                Motivo <span className="text-rose-500">*</span>
+                Motivo <span className="text-rose-500 dark:text-rose-400">*</span>
               </label>
-              <span className="text-[11px] tabular-nums text-slate-400">
+              <span className="text-[11px] tabular-nums text-slate-400 dark:text-slate-400">
                 {formulario.motivo.length}/{MOTIVO_MAX}
               </span>
             </div>
@@ -573,13 +573,13 @@ export function FormularioTradicional({
             <ErrorCampo id="motivo-error" mensaje={errores.motivo} />
           </div>
 
-          <div className="flex flex-col gap-4 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 border-t border-slate-100 dark:border-slate-800 pt-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="flex items-start gap-2 text-xs leading-5 text-slate-500">
-                <ShieldIcon className="mt-0.5 size-4 shrink-0 text-slate-400" />
+              <p className="flex items-start gap-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                <ShieldIcon className="mt-0.5 size-4 shrink-0 text-slate-400 dark:text-slate-400" />
                 Tus datos se usan únicamente para gestionar este reporte.
               </p>
-              <p className="mt-1 text-[11px] leading-5 text-slate-400">
+              <p className="mt-1 text-[11px] leading-5 text-slate-400 dark:text-slate-400">
                 Máximo {CONFIG.maxReportesPorDia} reportes por día · Sin
                 duplicados en {CONFIG.ventanaDuplicadosHoras} h.
               </p>
@@ -590,7 +590,7 @@ export function FormularioTradicional({
                 type="button"
                 onClick={limpiarFormulario}
                 disabled={enviando}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-400 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-500/15 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Limpiar
               </button>

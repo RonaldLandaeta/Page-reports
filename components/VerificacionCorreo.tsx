@@ -110,14 +110,14 @@ export function VerificacionCorreo({
     return (
       <div
         aria-live="polite"
-        className="mt-2 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5"
+        className="mt-2 flex items-start gap-2 rounded-lg border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2.5"
       >
-        <CheckIcon className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+        <CheckIcon className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
         <div>
-          <p className="text-xs font-semibold text-emerald-800">
+          <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
             Correo verificado
           </p>
-          <p className="mt-0.5 text-[11px] text-emerald-700">{normalizado}</p>
+          <p className="mt-0.5 text-[11px] text-emerald-700 dark:text-emerald-300">{normalizado}</p>
         </div>
       </div>
     );
@@ -131,11 +131,11 @@ export function VerificacionCorreo({
             type="button"
             onClick={solicitar}
             disabled={fase === "enviando"}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {fase === "enviando" ? (
               <>
-                <span className="size-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                <span className="size-3.5 animate-spin rounded-full border-2 border-slate-300 dark:border-slate-700 border-t-slate-600" />
                 Enviando...
               </>
             ) : (
@@ -145,13 +145,13 @@ export function VerificacionCorreo({
               </>
             )}
           </button>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
             Enviaremos un código de 6 dígitos.
           </p>
         </div>
 
         {error && (
-          <p role="alert" className="mt-2 text-[11px] font-medium text-rose-600">
+          <p role="alert" className="mt-2 text-[11px] font-medium text-rose-600 dark:text-rose-400">
             {error}
           </p>
         )}
@@ -160,24 +160,24 @@ export function VerificacionCorreo({
   }
 
   return (
-    <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <p className="flex items-start gap-1.5 text-xs leading-5 text-slate-600">
-        <MailIcon className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
+    <div className="mt-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3">
+      <p className="flex items-start gap-1.5 text-xs leading-5 text-slate-600 dark:text-slate-400">
+        <MailIcon className="mt-0.5 size-3.5 shrink-0 text-slate-400 dark:text-slate-400" />
         <span>
           Enviamos un código de 6 dígitos a{" "}
-          <span className="font-semibold text-slate-800">{normalizado}</span>.
+          <span className="font-semibold text-slate-800 dark:text-slate-200">{normalizado}</span>.
         </span>
       </p>
 
       {codigoDemo && (
-        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+        <div className="mt-2 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3 py-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
             Modo desarrollo
           </p>
-          <p className="mt-1 text-xs leading-5 text-amber-800">
+          <p className="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-300">
             No se envió un correo real. Usa este código:
           </p>
-          <p className="mt-1 font-mono text-lg font-bold tracking-[0.3em] text-amber-900">
+          <p className="mt-1 font-mono text-lg font-bold tracking-[0.3em] text-amber-900 dark:text-amber-200">
             {codigoDemo}
           </p>
         </div>
@@ -205,7 +205,7 @@ export function VerificacionCorreo({
             }
           }}
           disabled={fase === "validando"}
-          className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm tracking-widest text-slate-900 placeholder:tracking-normal placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 disabled:bg-slate-50"
+          className="min-w-0 flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm tracking-widest text-slate-900 dark:text-slate-100 placeholder:tracking-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 disabled:bg-slate-50 dark:disabled:bg-slate-800"
         />
         <button
           type="button"
@@ -228,21 +228,21 @@ export function VerificacionCorreo({
         <p
           id="codigo-verificacion-error"
           role="alert"
-          className="mt-2 text-[11px] font-medium text-rose-600"
+          className="mt-2 text-[11px] font-medium text-rose-600 dark:text-rose-400"
         >
           {error}
         </p>
       )}
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] text-slate-500">
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
           Válido por {CONFIG.duracionCodigoVerificacionMinutos} minutos.
         </p>
         <button
           type="button"
           onClick={solicitar}
           disabled={cooldown > 0 || fase === "validando"}
-          className="text-[11px] font-semibold text-indigo-600 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
+          className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
         >
           {cooldown > 0 ? `Reenviar en ${cooldown}s` : "Reenviar código"}
         </button>

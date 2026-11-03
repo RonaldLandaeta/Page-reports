@@ -496,14 +496,14 @@ const MensajeBurbuja = memo(function MensajeBurbuja({
       <div
         className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-6 shadow-sm ${
           esBot
-            ? "rounded-tl-sm border border-slate-200 bg-white text-slate-700"
+            ? "rounded-tl-sm border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300"
             : "rounded-tr-sm bg-indigo-600 text-white"
         }`}
       >
         <span className="sr-only">{esBot ? "Asistente: " : "Tú: "}</span>
         <p className="whitespace-pre-wrap break-words">{mensaje.texto}</p>
         {mensaje.ticket && (
-          <p className="mt-2 select-all rounded-lg bg-indigo-50 px-3 py-2 text-center font-mono text-base font-bold tracking-wider text-indigo-700 ring-1 ring-indigo-100">
+          <p className="mt-2 select-all rounded-lg bg-indigo-50 dark:bg-indigo-500/15 px-3 py-2 text-center font-mono text-base font-bold tracking-wider text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-100 dark:ring-indigo-500/30">
             {mensaje.ticket}
           </p>
         )}
@@ -515,11 +515,11 @@ const MensajeBurbuja = memo(function MensajeBurbuja({
 function IndicadorEscribiendo() {
   return (
     <div className="flex justify-start" aria-hidden="true">
-      <div className="flex items-center gap-1 rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <div className="flex items-center gap-1 rounded-2xl rounded-tl-sm border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 shadow-sm">
         {[0, 1, 2].map((punto) => (
           <span
             key={punto}
-            className="size-1.5 animate-bounce rounded-full bg-slate-400 motion-reduce:animate-none"
+            className="size-1.5 animate-bounce rounded-full bg-slate-400 dark:bg-slate-500 motion-reduce:animate-none"
             style={{ animationDelay: `${punto * 120}ms` }}
           />
         ))}
@@ -529,7 +529,7 @@ function IndicadorEscribiendo() {
 }
 
 const CLASE_CHIP =
-  "rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-full border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-500/15 px-3 py-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300 transition-colors hover:bg-indigo-100 dark:hover:bg-indigo-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50";
 
 interface CompositorProps {
   paso: Paso;
@@ -591,7 +591,7 @@ function Compositor({
   }
 
   return (
-    <div className="border-t border-slate-100 bg-white">
+    <div className="border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
       {paso === "tipo_error" && (
         <div
           role="group"
@@ -654,7 +654,7 @@ function Compositor({
       )}
 
       <div className="p-4 sm:px-6">
-        <div className="flex items-end gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 transition-colors focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/10">
+        <div className="flex items-end gap-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 transition-colors focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/10">
           <textarea
             ref={entradaRef}
             rows={paso === "motivo" ? 3 : 1}
@@ -675,20 +675,20 @@ function Compositor({
             placeholder={PLACEHOLDERS[paso]}
             onChange={(event) => cambiar(event.target.value)}
             onKeyDown={manejarTecla}
-            className="max-h-32 min-w-0 flex-1 resize-none bg-transparent text-sm leading-6 text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
+            className="max-h-32 min-w-0 flex-1 resize-none bg-transparent text-sm leading-6 text-slate-900 dark:text-slate-100 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 disabled:cursor-not-allowed"
           />
           <button
             type="button"
             onClick={() => enviar()}
             disabled={bloqueado || texto.trim().length === 0}
             aria-label="Enviar mensaje"
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 disabled:cursor-not-allowed disabled:bg-slate-200 dark:disabled:bg-slate-700 disabled:text-slate-400"
           >
             <SendIcon className="size-4" />
           </button>
         </div>
 
-        <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-slate-400">
+        <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-slate-400 dark:text-slate-400">
           <span>
             {paso === "motivo"
               ? "Enter envía · Shift+Enter nueva línea"
@@ -834,9 +834,9 @@ export function ChatbotPanel({
   return (
     <section
       aria-labelledby="titulo-chatbot"
-      className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+      className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm"
     >
-      <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 sm:px-6">
+      <div className="flex items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 px-5 py-4 sm:px-6">
         <div className="flex items-center gap-3">
           <span className="flex size-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
             <ChatIcon className="size-5" />
@@ -844,11 +844,11 @@ export function ChatbotPanel({
           <div>
             <h2
               id="titulo-chatbot"
-              className="text-sm font-semibold text-slate-900"
+              className="text-sm font-semibold text-slate-900 dark:text-slate-100"
             >
               Asistente de horarios
             </h2>
-            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
               <span className="size-1.5 rounded-full bg-emerald-500" />
               En línea · versión beta
             </p>
@@ -858,7 +858,7 @@ export function ChatbotPanel({
           type="button"
           onClick={reiniciarConversacion}
           disabled={ocupado}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-500/15 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Nueva conversación
         </button>
@@ -867,7 +867,7 @@ export function ChatbotPanel({
       {catalogoVacio && (
         <p
           role="alert"
-          className="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-800 sm:px-6"
+          className="border-b border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-5 py-3 text-sm text-amber-800 dark:text-amber-300 sm:px-6"
         >
           {errorCatalogo ??
             "El catálogo de materias está vacío, así que el asistente no puede registrar reportes ahora."}
@@ -880,7 +880,7 @@ export function ChatbotPanel({
         aria-live="polite"
         aria-relevant="additions"
         aria-label="Conversación con el asistente"
-        className="h-[26rem] space-y-3 overflow-y-auto bg-slate-50/70 px-4 py-5 sm:h-[30rem] sm:px-6"
+        className="h-[26rem] space-y-3 overflow-y-auto bg-slate-50/70 dark:bg-slate-800/60 px-4 py-5 sm:h-[30rem] sm:px-6"
       >
         {mensajes.map((mensaje) => (
           <MensajeBurbuja key={mensaje.id} mensaje={mensaje} />
@@ -898,11 +898,11 @@ export function ChatbotPanel({
         onEnviar={enviar}
       />
 
-      <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-3 text-center sm:px-6">
+      <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/60 px-5 py-3 text-center sm:px-6">
         <button
           type="button"
           onClick={onIrAFormulario}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-700 transition-colors hover:text-indigo-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300 transition-colors hover:text-indigo-900 dark:hover:text-indigo-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
         >
           Prefiero usar el formulario tradicional
           <ArrowRightIcon className="size-3.5" />

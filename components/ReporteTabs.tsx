@@ -25,7 +25,7 @@ export function ReporteTabs({ active, onChange }: ReporteTabsProps) {
     <div
       role="tablist"
       aria-label="Método para reportar el problema"
-      className="grid w-full grid-cols-2 gap-1 rounded-xl bg-slate-200/70 p-1 sm:inline-flex sm:w-auto"
+      className="grid w-full grid-cols-2 gap-1 rounded-xl bg-slate-200/70 dark:bg-slate-800/70 p-1 sm:inline-flex sm:w-auto"
     >
       {TABS.map((tab) => {
         const Icon = tab.icon;
@@ -40,10 +40,10 @@ export function ReporteTabs({ active, onChange }: ReporteTabsProps) {
             aria-selected={isActive}
             aria-controls={`panel-${tab.id}`}
             onClick={() => onChange(tab.id)}
-            className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
+            className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950 ${
               isActive
-                ? "bg-white text-indigo-700 shadow-sm ring-1 ring-slate-900/5"
-                : "text-slate-600 hover:bg-white/60 hover:text-slate-900"
+                ? "bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10"
+                : "text-slate-600 dark:text-slate-400 hover:bg-white/60 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100"
             }`}
           >
             <Icon className="size-4" />

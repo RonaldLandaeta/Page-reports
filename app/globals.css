@@ -1,7 +1,14 @@
 @import "tailwindcss";
 
+/* El modo oscuro se controla con la clase `.dark` en <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
 }
 
 html {
@@ -15,6 +22,11 @@ body {
 ::selection {
   background-color: #c7d2fe;
   color: #1e1b4b;
+}
+
+.dark ::selection {
+  background-color: #4338ca;
+  color: #eef2ff;
 }
 
 @keyframes fade-in {

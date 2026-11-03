@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
   ESTADOS_REPORTE,
@@ -10,6 +10,8 @@ import {
 } from "@/lib/catalogos";
 import { postJson } from "@/lib/api-cliente";
 import type { EstadoReporte, Reporte } from "@/lib/types";
+
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const formatoFecha = new Intl.DateTimeFormat("es-VE", {
   dateStyle: "medium",
@@ -21,9 +23,9 @@ const JSON_HEADERS = { "Content-Type": "application/json" };
 const boton =
   "rounded-xl px-3.5 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50";
 const botonPrimario = `${boton} bg-indigo-600 text-white hover:bg-indigo-700`;
-const botonSecundario = `${boton} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50`;
+const botonSecundario = `${boton} border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800`;
 const campo =
-  "rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10";
+  "rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10";
 
 interface RespuestaApi {
   ok: boolean;
@@ -38,6 +40,32 @@ async function leerRespuesta(respuesta: Response): Promise<RespuestaApi> {
   } catch {
     return { ok: false, mensaje: "Respuesta inesperada del servidor." };
   }
+}
+
+/** Checkbox de grupo con estado intermedio cuando hay tickets sueltos marcados. */
+function CheckboxGrupo({
+  marcado,
+  parcial,
+  etiqueta,
+  onChange,
+}: {
+  marcado: boolean;
+  parcial: boolean;
+  etiqueta: string;
+  onChange: () => void;
+}) {
+  return (
+    <input
+      type="checkbox"
+      checked={marcado}
+      aria-label={etiqueta}
+      onChange={onChange}
+      ref={(elemento) => {
+        if (elemento) elemento.indeterminate = parcial;
+      }}
+      className="mt-1 h-4 w-4 shrink-0"
+    />
+  );
 }
 
 export function AdminView({ miUserId }: { miUserId: string }) {
@@ -143,6 +171,45 @@ export function AdminView({ miUserId }: { miUserId: string }) {
   function alternarTodos() {
     setSeleccion(todosMarcados ? new Set() : new Set(reportes.map((r) => r.id)));
   }
+
+  function alternarGrupo(ids: string[]) {
+    setSeleccion((previa) => {
+      const siguiente = new Set(previa);
+      const todos = ids.every((id) => siguiente.has(id));
+
+      for (const id of ids) {
+        if (todos) siguiente.delete(id);
+        else siguiente.add(id);
+      }
+
+      return siguiente;
+    });
+  }
+
+  /** Agrupa por cédula conservando el orden de llegada (más reciente primero). */
+  const grupos = useMemo(() => {
+    const mapa = new Map<
+      string,
+      { ci: string; nombre: string; correo: string; reportes: Reporte[] }
+    >();
+
+    for (const reporte of reportes) {
+      const grupo = mapa.get(reporte.ci);
+
+      if (grupo) {
+        grupo.reportes.push(reporte);
+      } else {
+        mapa.set(reporte.ci, {
+          ci: reporte.ci,
+          nombre: reporte.nombre,
+          correo: reporte.correo,
+          reportes: [reporte],
+        });
+      }
+    }
+
+    return [...mapa.values()];
+  }, [reportes]);
 
   async function descargar(modo: "seleccion" | "filtro") {
     if (trabajando) return;
@@ -257,10 +324,13 @@ export function AdminView({ miUserId }: { miUserId: string }) {
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Reportes de horarios</h1>
-        <button type="button" onClick={salir} className={botonSecundario}>
-          Cerrar sesión
-        </button>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Reportes de horarios</h1>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <button type="button" onClick={salir} className={botonSecundario}>
+            Cerrar sesión
+          </button>
+        </div>
       </div>
 
       <div className="mt-5 flex flex-wrap gap-3">
@@ -277,8 +347,8 @@ export function AdminView({ miUserId }: { miUserId: string }) {
       </div>
 
       <section aria-label="Acciones por lote"
-        className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <label className="flex items-center gap-2 text-sm text-slate-700">
+        className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-sm">
+        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
           <input type="checkbox" checked={todosMarcados} onChange={alternarTodos}
             disabled={reportes.length === 0} className="h-4 w-4" />
           Seleccionar visibles ({seleccion.size})
@@ -299,7 +369,7 @@ export function AdminView({ miUserId }: { miUserId: string }) {
           Descargar todos ({total}, según filtro)
         </button>
 
-        <div className="flex w-full flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+        <div className="flex w-full flex-wrap items-center gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
           <select value={loteEstado} onChange={(e) => setLoteEstado(e.target.value as "" | EstadoReporte)}
             aria-label="Nuevo estado para la selección" className={campo}>
             <option value="">Cambiar estado de la selección…</option>
@@ -315,65 +385,107 @@ export function AdminView({ miUserId }: { miUserId: string }) {
           </button>
         </div>
 
-        <p className="w-full text-xs text-slate-500">
+        <p className="w-full text-xs text-slate-500 dark:text-slate-400">
           Al descargar, los reportes «Pendiente de revisión» pasan automáticamente a «En revisión».
         </p>
       </section>
 
       {error && (
-        <p role="alert" className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
+        <p role="alert" className="mt-4 rounded-lg border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">{error}</p>
       )}
       {aviso && (
-        <p role="status" className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{aviso}</p>
+        <p role="status" className="mt-4 rounded-lg border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300">{aviso}</p>
       )}
 
-      <p className="mt-4 text-xs text-slate-500" aria-live="polite">
+      <p className="mt-4 text-xs text-slate-500 dark:text-slate-400" aria-live="polite">
         {cargando
           ? "Cargando..."
-          : `Mostrando ${reportes.length} de ${total} reporte(s) (los 200 más recientes)`}
+          : `Mostrando ${reportes.length} de ${total} reporte(s) en ${grupos.length} cédula(s) (los 200 más recientes)`}
       </p>
 
-      <ul className="mt-3 space-y-3">
-        {reportes.map((r) => (
-          <li key={r.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex min-w-0 gap-3">
-                <input type="checkbox" checked={seleccion.has(r.id)} onChange={() => alternar(r.id)}
-                  aria-label={`Seleccionar ${r.ticket}`} className="mt-1 h-4 w-4 shrink-0" />
-                <div className="min-w-0">
-                  <p className="font-mono text-sm font-bold text-indigo-700">{r.ticket}</p>
-                  <p className="mt-0.5 text-sm font-semibold text-slate-800">
-                    {r.materiaNombre} <span className="font-normal text-slate-500">· NRC {r.nrc} · {r.materiaCodigo}</span>
-                  </p>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    {getTipoErrorLabel(r.tipo_error)}
-                    {r.tipoErrorDetalle ? ` (${r.tipoErrorDetalle})` : ""} · {formatoFecha.format(new Date(r.creadoEn))}
-                  </p>
+      <ul className="mt-3 space-y-4">
+        {grupos.map((grupo) => {
+          const idsGrupo = grupo.reportes.map((r) => r.id);
+          const seleccionados = idsGrupo.filter((id) => seleccion.has(id)).length;
+          const todosGrupo = seleccionados === idsGrupo.length;
+          const parcial = seleccionados > 0 && !todosGrupo;
+
+          return (
+            <li
+              key={grupo.ci}
+              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/40">
+                <div className="flex min-w-0 items-start gap-3">
+                  <CheckboxGrupo
+                    marcado={todosGrupo}
+                    parcial={parcial}
+                    etiqueta={`Seleccionar todos los tickets de la cédula ${grupo.ci}`}
+                    onChange={() => alternarGrupo(idsGrupo)}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Cédula
+                    </p>
+                    <p className="font-mono text-lg font-bold tracking-wide text-slate-900 dark:text-slate-100">
+                      {grupo.ci}
+                    </p>
+                    <p className="mt-0.5 break-all text-xs text-slate-600 dark:text-slate-400">
+                      {grupo.nombre} · {grupo.correo}
+                    </p>
+                  </div>
                 </div>
+
+                <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/15 dark:text-indigo-300">
+                  {grupo.reportes.length} ticket{grupo.reportes.length === 1 ? "" : "s"}
+                </span>
               </div>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                {getEstadoReporteLabel(r.estado)}
-              </span>
-            </div>
 
-            <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-700">{r.motivo}</p>
-            <p className="mt-2 break-all text-xs text-slate-500">
-              {r.nombre} · CI {r.ci} · {r.correo}
-            </p>
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {grupo.reportes.map((r) => (
+                  <li key={r.id} className="px-4 py-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex min-w-0 gap-3">
+                        <input type="checkbox" checked={seleccion.has(r.id)} onChange={() => alternar(r.id)}
+                          aria-label={`Seleccionar ${r.ticket}`} className="mt-1 h-4 w-4 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-mono text-sm font-bold text-indigo-700 dark:text-indigo-300">{r.ticket}</p>
+                          <p className="mt-0.5 text-sm font-semibold text-slate-800 dark:text-slate-200">
+                            {r.materiaNombre} <span className="font-normal text-slate-500 dark:text-slate-400">· NRC {r.nrc} · {r.materiaCodigo}</span>
+                          </p>
+                          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                            {getTipoErrorLabel(r.tipo_error)}
+                            {r.tipoErrorDetalle ? ` (${r.tipoErrorDetalle})` : ""} · {formatoFecha.format(new Date(r.creadoEn))}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-300">
+                        {getEstadoReporteLabel(r.estado)}
+                      </span>
+                    </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <input type="text" maxLength={500} placeholder="Nota (opcional)" aria-label={`Nota para ${r.ticket}`}
-                value={notas[r.id] ?? ""} onChange={(e) => setNotas((p) => ({ ...p, [r.id]: e.target.value }))}
-                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs" />
-              {ESTADOS_REPORTE.filter((e) => e.value !== r.estado).map((e) => (
-                <button key={e.value} type="button" disabled={guardando === r.id} onClick={() => void cambiar(r, e.value)}
-                  className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:bg-indigo-400">
-                  Pasar a «{e.label}»
-                </button>
-              ))}
-            </div>
-          </li>
-        ))}
+                    <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-700 dark:text-slate-300">{r.motivo}</p>
+                    <p className="mt-1.5 break-all text-xs text-slate-500 dark:text-slate-400">
+                      {r.nombre} · {r.correo}
+                    </p>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <input type="text" maxLength={500} placeholder="Nota (opcional)" aria-label={`Nota para ${r.ticket}`}
+                        value={notas[r.id] ?? ""} onChange={(e) => setNotas((p) => ({ ...p, [r.id]: e.target.value }))}
+                        className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500" />
+                      {ESTADOS_REPORTE.filter((e) => e.value !== r.estado).map((e) => (
+                        <button key={e.value} type="button" disabled={guardando === r.id} onClick={() => void cambiar(r, e.value)}
+                          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:bg-indigo-400">
+                          Pasar a «{e.label}»
+                        </button>
+                      ))}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          );
+        })}
       </ul>
 
       <PanelAdministradores miUserId={miUserId} onSesionCaducada={irAlLogin} />
@@ -499,9 +611,9 @@ function PanelAdministradores({
   }
 
   return (
-    <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="mt-10 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
       <button type="button" onClick={() => setAbierto((v) => !v)} aria-expanded={abierto}
-        className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-800">
+        className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-800 dark:text-slate-200">
         Administradores
         <span aria-hidden="true">{abierto ? "−" : "+"}</span>
       </button>
@@ -509,23 +621,23 @@ function PanelAdministradores({
       {abierto && (
         <div className="mt-4 space-y-4">
           {error && (
-            <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
+            <p role="alert" className="rounded-lg border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">{error}</p>
           )}
           {aviso && (
-            <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{aviso}</p>
+            <p role="status" className="rounded-lg border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300">{aviso}</p>
           )}
 
-          <ul className="divide-y divide-slate-100 text-sm">
-            {cargando && lista.length === 0 && <li className="py-2 text-slate-500">Cargando...</li>}
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+            {cargando && lista.length === 0 && <li className="py-2 text-slate-500 dark:text-slate-400">Cargando...</li>}
             {lista.map((fila) => (
               <li key={fila.userId} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span className="break-all text-slate-800">
+                <span className="break-all text-slate-800 dark:text-slate-200">
                   {fila.email}
-                  {fila.userId === miUserId && <span className="ml-2 text-xs text-slate-500">(tú)</span>}
+                  {fila.userId === miUserId && <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">(tú)</span>}
                 </span>
                 {fila.userId !== miUserId && (
                   <button type="button" disabled={enviando} onClick={() => void quitar(fila)}
-                    className="rounded-lg border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">
+                    className="rounded-lg border border-rose-200 dark:border-rose-500/30 px-3 py-1 text-xs font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-500/15 disabled:opacity-50">
                     Quitar acceso
                   </button>
                 )}
@@ -533,14 +645,14 @@ function PanelAdministradores({
             ))}
           </ul>
 
-          <form onSubmit={agregar} className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">
+          <form onSubmit={agregar} className="flex flex-wrap items-end gap-3 border-t border-slate-100 dark:border-slate-800 pt-4">
             <div className="min-w-0 flex-1">
-              <label htmlFor="nuevo-admin-correo" className="block text-xs font-medium text-slate-600">Correo</label>
+              <label htmlFor="nuevo-admin-correo" className="block text-xs font-medium text-slate-600 dark:text-slate-400">Correo</label>
               <input id="nuevo-admin-correo" type="email" required value={correo}
                 onChange={(e) => setCorreo(e.target.value)} className={`${campo} mt-1 w-full`} />
             </div>
             <div className="min-w-0 flex-1">
-              <label htmlFor="nuevo-admin-clave" className="block text-xs font-medium text-slate-600">
+              <label htmlFor="nuevo-admin-clave" className="block text-xs font-medium text-slate-600 dark:text-slate-400">
                 Contraseña temporal (solo si el usuario aún no existe)
               </label>
               <input id="nuevo-admin-clave" type="password" minLength={10} maxLength={72}

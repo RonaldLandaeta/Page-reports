@@ -4,13 +4,6 @@ Aplicación web para reportar problemas de horarios académicos y consultar su
 estado. Frontend en Next.js (App Router), React y Tailwind CSS; backend en
 Supabase (Postgres + RLS) y correo transaccional con Resend o Gmail SMTP.
 
-## Rutas
-
-| Ruta         | Descripción                                                          |
-| ------------ | -------------------------------------------------------------------- |
-| `/`          | Inicio, accesos a reportar y consultar.                              |
-| `/reportar`  | Formulario tradicional, chatbot interactivo, resumen y consola JSON. |
-| `/consultar` | Consulta de un reporte mediante ticket + cédula.                     |
 
 ## Arquitectura
 
@@ -75,172 +68,67 @@ Malla curricular ── vive en el repositorio (lib/materias), nunca en Supabase
   pide el detalle (máx. 100 caracteres).
 - **Historial de estados** en `reporte_eventos` (trigger al cambiar `estado`).
 
-## Puesta en marcha
+# 🎓 Sistema Integrado de Reporte de Horarios Académicos
 
-### 1. Base de datos
+Una plataforma web moderna, ágil e interactiva diseñada para optimizar la comunicación entre la comunidad estudiantil y las autoridades académicas en la resolución de incidencias de inscripción y horarios.
 
-En el dashboard de Supabase → **SQL Editor**, ejecuta en este orden:
+---
 
-1. `supabase/migrations/0001_init.sql` — tablas, índices, RLS y triggers
-   (histórico: la versión inicial también creaba la tabla de materias y la
-   función `registrar_reporte`, que `0006` elimina).
-2. `supabase/migrations/0002_auditoria.sql` — intentos de código atómicos,
-   límite de consultas fallidas y zona horaria de Venezuela.
-3. `supabase/migrations/0003_admin.sql` — tabla `administradores` y función
-   para cambiar estados (panel `/admin`).
-4. `supabase/migrations/0004_permisos.sql` — permisos explícitos de la Data API
-   para `service_role`.
-5. `supabase/migrations/0005_catalogo_local.sql` — quita la clave foránea de
-   `reportes.nrc` hacia la tabla `materias`.
-6. `supabase/migrations/0006_malla_local.sql` — **migración a malla local**:
-   agrega `materia_codigo` y `tipo_error_detalle`, elimina la columna de aula del reporte,
-   actualiza el CHECK de `tipo_error` (seis valores), limita
-   `tipo_error_detalle` a 100, recrea el índice de duplicados con
-   `materia_codigo`, elimina la función `registrar_reporte` y borra la tabla de
-   materias.
-7. `supabase/migrations/0007_esquema_consistente.sql` — **esquema tipado**:
-   convierte `estado` y `tipo_error` en enums nativos (coinciden con
-   `lib/types.ts` y `lib/supabase/types.ts`), agrega el evento inicial al
-   historial, deja un ticket por defecto en Postgres y recrea
-   `cambiar_estado_reporte` con el enum.
+## 🌟 La Solución
 
-`supabase/setup.sql` ya trae todo junto (0001 a 0007) para pegar de una vez.
-**No se edita a mano**: se regenera con `npm run db:setup` a partir de las
-migraciones. Antes de aplicarlo puedes validarlo contra un Postgres real
-(WASM) con `npm run db:test`, que prueba base nueva, actualización desde
-0001–0005 y ejecución repetida.
+Tradicionalmente, la gestión de incidencias en horarios académicos (cruces de materia, cupos agotados, inconsistencias en prelaciones) genera alta congestión administrativa y respuestas tardías. 
 
-También puedes usar la CLI:
+Este sistema reemplaza los canales de atención convencionales por una experiencia digital centralizada que **automatiza la validación de solicitudes, agiliza la toma de decisiones y brinda transparencia total al usuario** mediante el seguimiento de tickets en tiempo real.
 
-```bash
-supabase link --project-ref <ref>
-supabase db push
-```
+---
 
-> **Importante (migración a malla local):** si tu proyecto ya tenía las
-> migraciones anteriores, ejecuta `0006_malla_local.sql` y después
-> `0007_esquema_consistente.sql` **antes** de desplegar este código. Son
-> idempotentes y no tocan `reporte_eventos`, `codigos_verificacion`,
-> `consulta_intentos` ni `administradores`. Los reportes existentes (si los
-> hubiera) se conservan: sus tipos antiguos se convierten
-> (`horario-incorrecto` → `cambio-horario`, `cruce-materias` →
-> `cruce-horario`; `aula-incorrecta`, `docente-incorrecto` y `otro` → `otro`
-> con un detalle) y `materia_codigo` toma el valor de `nrc`.
->
-> Ya no hay archivos de carga de catálogo (CSV ni seed SQL): la malla solo se
-> edita en `lib/materias/index.ts`.
+## 🔥 Características Principales
 
-El archivo `supabase/config.toml` ya está incluido para el entorno local
-(`supabase start`). Ajusta `db.major_version` si tu proyecto remoto usa otra
-versión de Postgres.
+### 🎯 Para el Estudiante
+* **Asistencia Multicanal:** Registro de solicitudes a través de un **formulario tradicional guiado** o mediante un **Chatbot interactivo** que asiste en la búsqueda inteligente de asignaturas.
+* **Catálogo Integrado y Búsqueda Inteligente:** Localización inmediata de materias por código, NRC o nombre, evitando errores de selección.
+* **Verificación de Identidad:** Validación rápida de correo institucional para asegurar la autenticidad de cada reporte.
+* **Seguimiento Transparente:** Consulta de estado en tiempo real (`Pendiente`, `En Revisión`, `Resuelto`) únicamente con el número de ticket y documento de identidad.
 
-### 2. Variables de entorno
+### 🛡️ Para la Administración Académica
+* **Panel de Control Centralizado:** Gestión eficiente e intuitiva de todos los casos reportados.
+* **Acciones en Lote:** Procesamiento masivo de solicitudes y actualización simplificada de estados.
+* **Exportación de Datos:** Descarga rápida de reportes para análisis operativo en formatos estándar (Excel / CSV / JSON).
+* **Control de Duplicados y Reglas de Negocio:** Validación en tiempo real para prevenir reportes repetidos y saturación del sistema.
 
-```bash
-cp .env.example .env.local
-```
+---
 
-Completa:
+## 🚀 Innovación y Optimización Tecnológica
 
-| Variable                        | Dónde se obtiene                                |
-| ------------------------------- | ----------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase → Project Settings → API               |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API               |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase → Project Settings → API (secreta)     |
-| `VERIFICACION_SECRET`           | `openssl rand -hex 32`                          |
-| `RESEND_API_KEY`                | Resend → API Keys (opcional)                    |
-| `GMAIL_USER`                    | Tu correo de Gmail (opcional)                   |
-| `GMAIL_APP_PASSWORD`            | Contraseña de aplicación de Google (opcional)   |
-| `EMAIL_FROM`                    | Remitente; vacío usa el proveedor configurado   |
-| `NEXT_PUBLIC_DOMINIOS_CORREO`   | Dominios institucionales permitidos (coma)      |
+La aplicación fue desarrollada desde cero para reemplazar procesos legados de administración de usuarios por una arquitectura web moderna y de alto rendimiento:
 
-Opcional: en el servidor puedes usar `SUPABASE_URL` en lugar de
-`NEXT_PUBLIC_SUPABASE_URL`. La app limpia espacios/saltos de línea y valida que
-la URL sea solo el origen (`https://<ref>.supabase.co`, sin `/rest/v1`). También
-rechaza una `SUPABASE_SERVICE_ROLE_KEY` que sea en realidad la clave anon.
+* **Experiencia de Usuario Fluida:** Construido sobre **Next.js** y **React**, garantizando una navegación ultrarrápida y adaptada a dispositivos móviles con **Tailwind CSS**.
+* **Gestión Eficiente de Datos:** Consulta de catálogo optimizada para responder al instante sin generar latencia ni sobrecargar los servidores centrales.
+* **Procesamiento Asíncrono de Notificaciones:** Confirmaciones y actualizaciones enviadas al correo institucional de manera automática.
+* **Privacidad y Protección por Diseño:** Arquitectura configurada bajo estándares de aislamiento de datos, validación estricta de dominios institucionales autorizados y control contra accesos no autorizados.
 
-`SUPABASE_SERVICE_ROLE_KEY` y `VERIFICACION_SECRET` **no** deben llevar el
-prefijo `NEXT_PUBLIC_` ni subirse al repositorio.
+---
 
-Después de cambiar variables en Vercel hay que **volver a desplegar**: las
-variables `NEXT_PUBLIC_*` se fijan en tiempo de build.
+## 🗺️ Estructura del Portal
 
-### 3. Correo
+| Sección | Descripción |
+| :--- | :--- |
+| **Portal Principal (`/`)** | Punto de entrada intuitivo con acceso rápido a reporte y consulta. |
+| **Módulo de Reporte (`/reportar`)** | Selección entre formulario estructurado o asistente virtual (Chatbot). |
+| **Módulo de Consulta (`/consultar`)** | Rastreador público de estatus de solicitudes mediante ticket asignado. |
+| **Panel Administrativo (`/admin`)** | Consola privada para la gestión, resolución y descarga de incidencias. |
 
-El orden de preferencia es: **Resend → Gmail SMTP → modo desarrollo**.
+---
 
-**Opción A: Gmail SMTP (rápida para probar)**
+## 💻 Requisitos para Ejecución en Desarrollo
 
-1. Activa la verificación en 2 pasos en tu cuenta de Google.
-2. Entra a [myaccount.google.com/security](https://myaccount.google.com/security)
-   y abre **Contraseñas de aplicaciones**.
-3. Crea una para “Correo” y copia la clave de 16 caracteres.
-4. En `.env.local`:
+Si deseas clonar y probar la aplicación en un entorno local:
 
-```bash
-GMAIL_USER=tucorreo@gmail.com
-GMAIL_APP_PASSWORD=abcd efgh ijkl mnop
-```
-
-No uses tu contraseña normal de Gmail. Si es una cuenta institucional, el
-administrador puede tener las contraseñas de aplicación desactivadas.
-
-**Opción B: Resend (recomendada para producción)**
-
-1. Crea una cuenta en [resend.com](https://resend.com) y una API key con
-   permiso *Sending access*.
-2. Sin dominio propio puedes usar
-   `EMAIL_FROM="Reportes Horarios <onboarding@resend.dev>"`, pero Resend solo
-   entregará a la dirección del dueño de la cuenta.
-3. Con dominio, verifica los registros DNS y usa
-   `EMAIL_FROM="Reportes Horarios <reportes@tudominio.com>"`.
-
-```bash
-RESEND_API_KEY=re_...
-EMAIL_FROM="Reportes Horarios <onboarding@resend.dev>"
-```
-
-**Modo desarrollo:** sin `RESEND_API_KEY` ni credenciales de Gmail, el código se
-imprime en la consola del servidor y se devuelve como `codigoDemo`
-(controlado por `MOSTRAR_CODIGO_DEMO`).
-
-### 4. Ejecutar
-
-```bash
-npm install
-npm run dev
-```
-
-Abre `http://localhost:3000`.
-
-```bash
-npm run build
-npm run start
-npm run typecheck
-npm run db:setup   # regenera supabase/setup.sql desde las migraciones
-npm run db:test    # valida las migraciones contra Postgres (PGlite)
-```
-
-## Panel de administración (`/admin`)
-
-1. Supabase → Authentication → Users → crea el primer usuario (correo +
-   contraseña, marca **Auto Confirm User**).
-2. Autorízalo (SQL Editor):
-   `insert into public.administradores (user_id) select id from auth.users where email = 'tu-admin@dominio';`
-3. Entra en `/admin/login`. La sesión es una cookie `httpOnly` firmada que dura
-   `ADMIN_SESION_HORAS` (8 h por defecto), sin renovarse. En cada petición se
-   vuelve a comprobar que el usuario siga en `administradores`: si lo quitas,
-   pierde el acceso al instante.
-4. Filtra por estado, busca por ticket/cédula/NRC/código y cambia el estado con
-   una nota opcional (queda en `reporte_eventos`).
-5. Lotes: marca reportes y pásalos de estado juntos, o descárgalos (CSV para
-   Excel o JSON), sea la selección o todo lo que cumpla el filtro (hasta 5000).
-   Al descargar, los «Pendiente de revisión» pasan a «En revisión».
-6. Más administradores: sección «Administradores» del panel (autoriza a un
-   usuario existente o crea uno con contraseña temporal). No puedes quitarte a
-   ti mismo ni dejar la lista vacía.
-7. Auditoría: cada intento de login (correcto o fallido) queda en
-   `public.admin_intentos` con el correo, la IP hasheada y el motivo.
+1. **Clonar el repositorio e instalar dependencias:**
+   ```bash
+   git clone [https://github.com/tu-usuario/reporte-horarios.git](https://github.com/tu-usuario/reporte-horarios.git)
+   cd reporte-horarios
+   npm install
 
 ## API
 
@@ -360,108 +248,6 @@ where conrelid = 'public.reportes'::regclass;
 Si falta alguna tabla o función, vuelve a ejecutar `supabase/setup.sql`
 completo. Es idempotente.
 
-## Modelo de datos
-
-- Catálogo local: `lib/materias/index.ts` (código, NRC, materia, prelaciones y
-  horario por defecto). No se guarda en la base de datos.
-- `reportes`: ticket único, datos del usuario, la materia (`nrc` visible,
-  `materia_codigo` único de la malla y `materia_nombre` como snapshot; sin aula
-  ni horario), `tipo_error`, `tipo_error_detalle` (solo para «otro», máx. 100),
-  `motivo`, `estado` y fechas.
-- `reporte_eventos`: historial de cambios de estado.
-- `codigos_verificacion`: hash del código, expiración, intentos, consumo e IP
-  hasheada.
-- `consulta_intentos`: consultas fallidas por IP (límite de fuerza bruta).
-- `administradores`: usuarios de Supabase Auth autorizados en `/admin`.
-
-Esquema final de `public.reportes`:
-
-| Columna              | Tipo          | Notas                                        |
-| -------------------- | ------------- | -------------------------------------------- |
-| `id`                 | `uuid`        | PK                                           |
-| `ticket`             | `text`        | único, formato `TK-XXXXXX`                   |
-| `ci`                 | `text`        | 7 a 8 dígitos                                |
-| `nombre`             | `text`        |                                              |
-| `correo`             | `text`        |                                              |
-| `nrc`                | `text`        | `nroCurso` visible (se repite entre carreras) |
-| `materia_codigo`     | `text`        | código único de la malla local               |
-| `materia_nombre`     | `text`        | snapshot                                     |
-| `tipo_error`         | `enum`        | `tipo_error_reporte` (seis valores)          |
-| `tipo_error_detalle` | `text`        | solo «otro», máximo 100                      |
-| `motivo`             | `text`        | 15 a 600 caracteres                          |
-| `estado`             | `enum`        | `estado_reporte`: `pendiente`, `en-revision`, `resuelto` |
-| `creado_en`          | `timestamptz` |                                              |
-| `actualizado_en`     | `timestamptz` |                                              |
-
-Los enums `estado_reporte` y `tipo_error_reporte` son la única fuente de verdad
-de los valores válidos: `lib/types.ts` y `lib/supabase/types.ts` los replican.
-`reporte_eventos` también usa `estado_reporte` y cada reporte nace con su evento
-inicial.
-
-RLS está activo en todas las tablas. El acceso queda denegado para `anon` y
-`authenticated`; la API usa `service_role`.
-
-## Estructura
-
-```
-app/
-  api/
-    reportes/route.ts
-    reportes/consultar/route.ts
-    salud/route.ts
-    verificacion/solicitar/route.ts
-    verificacion/validar/route.ts
-  (portal)/
-    layout.tsx
-    page.tsx
-    reportar/page.tsx            # Server component: catálogo local
-    reportar/ReportarView.tsx
-    consultar/page.tsx
-    consultar/ConsultarView.tsx
-components/
-  FormularioTradicional.tsx      # Validación cliente + envío a la API
-  VerificacionCorreo.tsx         # Código real vía API
-  ChatbotPanel.tsx
-  ModalExito.tsx
-  ResumenReportes.tsx            # Reportes de la sesión (panel dev)
-  ConsolaJson.tsx                # Panel dev; apagar en producción
-  ReporteTabs.tsx
-  SiteHeader.tsx / SiteFooter.tsx
-  icons.tsx
-context/
-  ReportesContext.tsx            # Estado de sesión + llamadas a la API
-lib/
-  api/                           # Helpers de route handlers (respuestas, IP)
-  api-cliente.ts                 # fetch tipado para el navegador
-  materias/index.ts              # Malla local (MALLA_OFICIAL), tipo Materia
-  materias/buscar.ts             # Búsqueda por código, NRC o nombre (pura)
-  supabase/
-    admin.ts                     # Cliente service_role (solo servidor)
-    consultas.ts                 # Límite de consultas fallidas
-    reportes.ts                  # Altas, búsqueda y reglas de negocio
-    types.ts                     # Tipos generados del esquema (contrato con Postgres)
-  verificacion-servidor.ts       # Códigos, límites y tokens HMAC
-  email.ts                       # Resend / Gmail SMTP
-  secreto.ts                     # Secreto único de firma/hash
-  catalogos.ts
-  config.ts
-  reportes/formato.ts
-  types.ts
-  validaciones.ts
-scripts/
-  generar-setup.mjs              # Regenera supabase/setup.sql (npm run db:setup)
-  probar-migraciones.mjs         # Prueba las migraciones con PGlite (npm run db:test)
-supabase/
-  config.toml
-  migrations/0001_init.sql
-  migrations/0002_auditoria.sql
-  migrations/0003_admin.sql
-  migrations/0004_permisos.sql
-  migrations/0005_catalogo_local.sql
-  migrations/0006_malla_local.sql
-  migrations/0007_esquema_consistente.sql
-  setup.sql
-```
 
 ## Seguridad
 
@@ -485,10 +271,3 @@ supabase/
 - Cabeceras de seguridad en `next.config.ts`.
 - La consola JSON muestra cédula y motivo: en producción está apagada salvo
   que pongas `NEXT_PUBLIC_MOSTRAR_CONSOLA=true`.
-
-## Pendientes
-
-- Rate limit distribuido (Upstash/Cloudflare) además del control en Postgres.
-- Cron (`pg_cron`) para ejecutar `limpiar_codigos_vencidos()`.
-- Reintentos y cola para el correo de confirmación.
-- Pruebas automatizadas de las reglas y de los route handlers.
