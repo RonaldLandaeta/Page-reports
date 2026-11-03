@@ -11,6 +11,7 @@ import {
 import { postJson } from "@/lib/api-cliente";
 import type { EstadoReporte, Reporte } from "@/lib/types";
 
+import { ChevronDownIcon } from "@/components/icons";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 const formatoFecha = new Intl.DateTimeFormat("es-VE", {
@@ -81,6 +82,7 @@ export function AdminView({ miUserId }: { miUserId: string }) {
   const [notas, setNotas] = useState<Record<string, string>>({});
 
   const [seleccion, setSeleccion] = useState<ReadonlySet<string>>(new Set());
+  const [contraidos, setContraidos] = useState<ReadonlySet<string>>(new Set());
   const [formato, setFormato] = useState<"csv" | "json">("csv");
   const [loteEstado, setLoteEstado] = useState<"" | EstadoReporte>("");
   const [loteNota, setLoteNota] = useState("");
@@ -210,6 +212,23 @@ export function AdminView({ miUserId }: { miUserId: string }) {
 
     return [...mapa.values()];
   }, [reportes]);
+
+  const todosContraidos =
+    grupos.length > 0 && grupos.every((grupo) => contraidos.has(grupo.ci));
+
+  function alternarContraido(ci: string) {
+    setContraidos((previa) => {
+      const siguiente = new Set(previa);
+      if (!siguiente.delete(ci)) siguiente.add(ci);
+      return siguiente;
+    });
+  }
+
+  function alternarTodosContraidos() {
+    setContraidos(
+      todosContraidos ? new Set() : new Set(grupos.map((grupo) => grupo.ci)),
+    );
+  }
 
   async function descargar(modo: "seleccion" | "filtro") {
     if (trabajando) return;
@@ -397,11 +416,22 @@ export function AdminView({ miUserId }: { miUserId: string }) {
         <p role="status" className="mt-4 rounded-lg border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300">{aviso}</p>
       )}
 
-      <p className="mt-4 text-xs text-slate-500 dark:text-slate-400" aria-live="polite">
-        {cargando
-          ? "Cargando..."
-          : `Mostrando ${reportes.length} de ${total} reporte(s) en ${grupos.length} cédula(s) (los 200 más recientes)`}
-      </p>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-slate-500 dark:text-slate-400" aria-live="polite">
+          {cargando
+            ? "Cargando..."
+            : `Mostrando ${reportes.length} de ${total} reporte(s) en ${grupos.length} cédula(s) (los 200 más recientes)`}
+        </p>
+        {grupos.length > 0 && (
+          <button
+            type="button"
+            onClick={alternarTodosContraidos}
+            className="text-xs font-semibold text-indigo-600 transition-colors hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
+          >
+            {todosContraidos ? "Expandir todas las cédulas" : "Contraer todas las cédulas"}
+          </button>
+        )}
+      </div>
 
       <ul className="mt-3 space-y-4">
         {grupos.map((grupo) => {
@@ -409,6 +439,7 @@ export function AdminView({ miUserId }: { miUserId: string }) {
           const seleccionados = idsGrupo.filter((id) => seleccion.has(id)).length;
           const todosGrupo = seleccionados === idsGrupo.length;
           const parcial = seleccionados > 0 && !todosGrupo;
+          const contraido = contraidos.has(grupo.ci);
 
           return (
             <li
@@ -436,12 +467,31 @@ export function AdminView({ miUserId }: { miUserId: string }) {
                   </div>
                 </div>
 
-                <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/15 dark:text-indigo-300">
-                  {grupo.reportes.length} ticket{grupo.reportes.length === 1 ? "" : "s"}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/15 dark:text-indigo-300">
+                    {grupo.reportes.length} ticket{grupo.reportes.length === 1 ? "" : "s"}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => alternarContraido(grupo.ci)}
+                    aria-expanded={!contraido}
+                    aria-controls={`tickets-${grupo.ci}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                  >
+                    {contraido ? "Mostrar" : "Ocultar"}
+                    <ChevronDownIcon
+                      className={`size-3.5 transition-transform ${contraido ? "" : "rotate-180"}`}
+                    />
+                  </button>
+                </div>
               </div>
 
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              <ul
+                id={`tickets-${grupo.ci}`}
+                hidden={contraido}
+                className="divide-y divide-slate-100 dark:divide-slate-800"
+              >
                 {grupo.reportes.map((r) => (
                   <li key={r.id} className="px-4 py-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
