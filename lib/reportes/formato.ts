@@ -105,3 +105,73 @@ export function reportesACsv(
 
   return `\uFEFF${[COLUMNAS_EXPORTACION.join(";"), ...filas].join("\r\n")}\r\n`;
 }
+
+// ── Exportación JSON para app_ingresos ──────────────────────────────────────
+
+/** Alumno tal como lo lee app_ingresos (una sola vez por cédula). */
+export interface EstudianteIngreso {
+  ci: string;
+  nombre: string;
+  correo: string;
+}
+
+/**
+ * Reporte tal como lo lee app_ingresos. `nrc` es el número de curso; `cod` es
+ * el código único de la malla (ej. «TELE-02002») y desambigua los números de
+ * curso que se repiten entre carreras.
+ */
+export interface ReporteIngreso {
+  ci: string;
+  tipo_error: string;
+  nrc: string;
+  cod: string;
+  materia: string;
+  horario: string;
+}
+
+export interface DatosIngreso {
+  estudiantes: EstudianteIngreso[];
+  reportes: ReporteIngreso[];
+}
+
+/**
+ * Arma el `datos.json` que se carga en app_ingresos: solo cédula, nombre,
+ * correo, tipo de error, número de curso, materia y horario. Nada interno
+ * (ticket, estado, fechas, motivo) sale en este archivo.
+ *
+ * - `reportes` debe venir ordenado del más reciente al más antiguo: si un
+ *   alumno cambió su nombre o correo entre reportes, gana el más reciente.
+ * - El horario sale de la malla local (`horarioDe`); si el código ya no
+ *   existe en la malla queda vacío en lugar de inventarse.
+ */
+export function reportesADatosIngreso(
+  reportes: Reporte[],
+  etiquetaTipo: (tipo: TipoError) => string,
+  horarioDe: (codigoMateria: string) => string | undefined,
+): DatosIngreso {
+  const estudiantes = new Map<string, EstudianteIngreso>();
+  const filas: ReporteIngreso[] = [];
+
+  for (const r of reportes) {
+    const ci = r.ci.trim();
+
+    if (!estudiantes.has(ci)) {
+      estudiantes.set(ci, {
+        ci,
+        nombre: r.nombre.trim(),
+        correo: r.correo.trim(),
+      });
+    }
+
+    filas.push({
+      ci,
+      tipo_error: etiquetaTipo(r.tipo_error),
+      nrc: r.nrc.trim(),
+      cod: r.materiaCodigo.trim(),
+      materia: r.materiaNombre.trim(),
+      horario: horarioDe(r.materiaCodigo)?.trim() ?? "",
+    });
+  }
+
+  return { estudiantes: [...estudiantes.values()], reportes: filas };
+}

@@ -376,7 +376,7 @@ export function AdminView({ miUserId }: { miUserId: string }) {
         <select value={formato} onChange={(e) => setFormato(e.target.value as "csv" | "json")}
           aria-label="Formato de descarga" className={campo}>
           <option value="csv">CSV (Excel)</option>
-          <option value="json">JSON</option>
+          <option value="json">JSON (app de ingreso)</option>
         </select>
 
         <button type="button" disabled={trabajando || seleccion.size === 0}

@@ -174,6 +174,43 @@ desde la malla local):
 `tipo_error_detalle` es obligatorio y de máximo 100 caracteres (en los demás
 tipos se ignora).
 
+### Exportación para app_ingresos (`datos.json`)
+
+En `/admin`, con el formato **JSON (app de ingreso)**, la descarga genera
+`datos-AAAA-MM-DD-HH-MM.json` listo para cargar en `app_ingresos`
+(`POST /api/admin/reportes` con `accion: "descargar"` y `formato: "json"`).
+Solo contiene los datos que la app necesita; ticket, estado, fechas y motivo
+no salen en este archivo (están en el CSV).
+
+```json
+{
+  "estudiantes": [
+    { "ci": "28123456", "nombre": "Carlos Mendoza", "correo": "carlos@universidad.edu.ve" }
+  ],
+  "reportes": [
+    {
+      "ci": "28123456",
+      "tipo_error": "Cruce de horario",
+      "nrc": "02002",
+      "cod": "TELE-02002",
+      "materia": "Circuitos Eléctricos",
+      "horario": "Sábado 08:00-12:00"
+    }
+  ]
+}
+```
+
+* `estudiantes` trae una sola fila por cédula; si el alumno cambió su nombre o
+  correo entre reportes, queda el del reporte más reciente.
+* `tipo_error` va con la etiqueta legible del catálogo (`Error de prerrequisito`,
+  `Error de correquisito`, `Reserva cerrada`, `Cruce de horario`,
+  `Cambio de horario`, `Otros`).
+* `nrc` es el número de curso. **Se repite entre carreras** (p. ej. `02002`
+  existe en FING, MECA y TELE), por eso cada reporte lleva también `cod`, el
+  código único de la malla, que es con el que `app_ingresos` enlaza la materia.
+* `horario` sale de la malla local; si el código ya no existe en la malla
+  queda vacío.
+
 ### Diagnóstico rápido
 
 `GET /api/salud` comprueba, sin exponer claves:
