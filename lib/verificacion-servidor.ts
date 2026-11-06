@@ -305,6 +305,14 @@ export async function validarCodigo(
     );
   }
 
+  if (!esCorreoInstitucional(correo)) {
+    throw new ErrorVerificacion(
+      "validacion",
+      mensajeCorreoInstitucional(),
+      422,
+    );
+  }
+
   if (!/^\d{6}$/.test(codigo)) {
     throw new ErrorVerificacion(
       "validacion",
@@ -406,6 +414,36 @@ export async function validarCodigo(
     throw new ErrorVerificacion(
       "codigo",
       "El código no coincide. Revisa los 6 dígitos e intenta de nuevo.",
+    );
+  }
+
+  // Solo con un código válido se comprueba el vínculo correo-cédula: así no
+  // se puede sondear si un correo pertenece a una cédula sin acceso al buzón.
+  // `crear_reporte` lo vuelve a comprobar de forma atómica antes de insertar.
+  const { data: vinculo, error: errorVinculo } = await supabase
+    .from("reportes")
+    .select("ci")
+    .eq("correo", correo)
+    .limit(1)
+    .maybeSingle();
+
+  if (errorVinculo) {
+    console.error(
+      "[verificacion] no se pudo comprobar el vínculo correo-cédula.",
+      errorVinculo,
+    );
+    throw new ErrorVerificacion(
+      "interno",
+      "No pudimos validar el correo.",
+      500,
+    );
+  }
+
+  if (vinculo && vinculo.ci !== ci) {
+    throw new ErrorVerificacion(
+      "validacion",
+      "Este correo ya está vinculado a otra cédula. Usa el correo con el que registraste tus reportes.",
+      409,
     );
   }
 

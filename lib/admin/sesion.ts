@@ -13,7 +13,12 @@ import {
   urlSupabase,
 } from "@/lib/supabase/admin";
 
-export const COOKIE_ADMIN = "admin_token";
+/**
+ * En producción lleva el prefijo __Host-: el navegador solo la acepta con
+ * Secure, Path=/ y sin Domain, así que un subdominio no puede sobrescribirla.
+ */
+export const COOKIE_ADMIN =
+  process.env.NODE_ENV === "production" ? "__Host-admin_token" : "admin_token";
 
 /** Tope absoluto de la sesión: ninguna configuración puede superarlo. */
 const HORAS_MAX = 2;

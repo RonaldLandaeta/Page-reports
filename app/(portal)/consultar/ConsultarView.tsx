@@ -18,6 +18,7 @@ import type { EstadoReporte, Reporte } from "@/lib/types";
 import {
   CEDULA_MAX_DIGITOS,
   CEDULA_MIN_DIGITOS,
+  TICKET_MAX_LONGITUD,
   esCedulaValida,
   esTicketValido,
   normalizarTicket,
@@ -81,7 +82,8 @@ export function ConsultarView() {
     const nuevosErrores: ErroresConsulta = {};
 
     if (!esTicketValido(ticket)) {
-      nuevosErrores.ticket = "Ingresa un ticket válido con formato TK-000000.";
+      nuevosErrores.ticket =
+        "Ingresa un ticket válido con formato TK-1234567 (7 dígitos).";
     }
 
     if (!esCedulaValida(ci)) {
@@ -168,15 +170,15 @@ export function ConsultarView() {
                 name="ticket"
                 type="text"
                 autoComplete="off"
-                maxLength={9}
-                placeholder="Ej. TK-839201"
+                maxLength={TICKET_MAX_LONGITUD}
+                placeholder="Ej. TK-8392012"
                 value={ticket}
                 onChange={(event) => {
                   setTicket(
                     event.target.value
                       .toUpperCase()
                       .replace(/[^A-Z0-9-]/g, "")
-                      .slice(0, 9),
+                      .slice(0, TICKET_MAX_LONGITUD),
                   );
                   setReporte(null);
                   limpiarError("ticket");

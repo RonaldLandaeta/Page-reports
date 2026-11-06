@@ -10,8 +10,17 @@ const REMITENTE_RESEND =
   process.env.EMAIL_FROM?.trim() ||
   "Reportes Horarios <onboarding@resend.dev>";
 
+/** Evita que un proveedor caído deje la petición colgada. */
+const TIMEOUT_ENVIO_MS = 10_000;
+
 let clienteResend: Resend | null = null;
 let transporteGmail: Transporter | null = null;
+
+export interface ResultadoEnvio {
+  /** `false` si no había proveedor o si el envío falló. Nunca se simula. */
+  enviado: boolean;
+  proveedor: "resend" | "gmail" | "dev";
+}
 
 function escaparHtml(valor: string): string {
   return valor
@@ -41,6 +50,9 @@ function gmail(): { transporte: Transporter; remitente: string } | null {
     port: 465,
     secure: true,
     auth: { user: usuario, pass: clave },
+    connectionTimeout: TIMEOUT_ENVIO_MS,
+    greetingTimeout: TIMEOUT_ENVIO_MS,
+    socketTimeout: TIMEOUT_ENVIO_MS,
   });
 
   const configurado = process.env.EMAIL_FROM?.trim();
@@ -57,31 +69,45 @@ async function enviar(
   asunto: string,
   html: string,
   texto: string,
-) {
+): Promise<ResultadoEnvio> {
   const cliente = resend();
 
-  // 1. Intento por Resend (con captura de errores segura)
+  // 1. Resend. El SDK acepta un AbortSignal, así que el timeout corta la
+  //    conexión real en lugar de dejar la promesa pendiente.
   if (cliente) {
+    const controlador = new AbortController();
+    const temporizador = setTimeout(
+      () => controlador.abort(),
+      TIMEOUT_ENVIO_MS,
+    );
+
     try {
-      const { data, error } = await cliente.emails.send({
-        from: REMITENTE_RESEND,
-        to: correo,
-        subject: asunto,
-        html,
-        text: texto,
-      });
+      const { data, error } = await cliente.emails.send(
+        {
+          from: REMITENTE_RESEND,
+          to: correo,
+          subject: asunto,
+          html,
+          text: texto,
+        },
+        { signal: controlador.signal },
+      );
 
       if (!error && data) {
-        return { enviado: true as const, proveedor: "resend" as const };
+        return { enviado: true, proveedor: "resend" };
       }
 
-      console.warn(`[email:resend-warn] Error en API Resend: ${error?.message || "Desconocido"}. Caer a modo simulación.`);
-    } catch (err) {
-      console.warn(`[email:resend-error] Excepción al enviar por Resend. Caer a modo simulación:`, err);
+      console.error(
+        `[email] Resend rechazó el envío: ${error?.message ?? "sin detalle"}`,
+      );
+    } catch (error) {
+      console.error("[email] Resend no respondió a tiempo o falló:", error);
+    } finally {
+      clearTimeout(temporizador);
     }
   }
 
-  // 2. Intento por Gmail (con captura de errores segura)
+  // 2. Gmail SMTP.
   const cuentaGmail = gmail();
 
   if (cuentaGmail) {
@@ -94,27 +120,26 @@ async function enviar(
         text: texto,
       });
 
-      return { enviado: true as const, proveedor: "gmail" as const };
-    } catch (err) {
-      console.warn(`[email:gmail-error] Error enviando por Gmail. Caer a modo simulación:`, err);
+      return { enviado: true, proveedor: "gmail" };
+    } catch (error) {
+      console.error("[email] Gmail SMTP falló:", error);
     }
   }
 
-  // 3. MODO SIMULACIÓN (Si no hay proveedores o si alguno falló)
-  console.info("\n=================== [CORREO SIMULADO] ===================");
-  console.info(`Para: ${correo}`);
-  console.info(`Asunto: ${asunto}`);
-  console.info(`Contenido:\n${texto}`);
-  console.info("=========================================================\n");
+  // 3. Sin proveedor (o todos fallaron): NO se simula un envío exitoso.
+  //    El llamador decidirá si muestra el código en desarrollo o responde 503.
+  console.warn(
+    "[email] no se pudo enviar el correo: no hay proveedor disponible o el envío falló.",
+  );
 
-  return { enviado: true as const, proveedor: "dev" as const };
+  return { enviado: false, proveedor: "dev" };
 }
 
 export async function enviarCodigoVerificacion(
   correo: string,
   codigo: string,
   minutos: number,
-) {
+): Promise<ResultadoEnvio> {
   const asunto = "Tu código de verificación";
   const texto = [
     `Tu código de verificación es: ${codigo}`,
@@ -141,7 +166,9 @@ export async function enviarCodigoVerificacion(
   return enviar(correo, asunto, html, texto);
 }
 
-export async function enviarConfirmacionReporte(reporte: Reporte) {
+export async function enviarConfirmacionReporte(
+  reporte: Reporte,
+): Promise<ResultadoEnvio> {
   const asunto = `Reporte ${reporte.ticket} recibido`;
   const texto = [
     `Hola ${reporte.nombre},`,

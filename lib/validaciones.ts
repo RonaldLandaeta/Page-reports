@@ -25,39 +25,33 @@ export function esCedulaValida(ci: string): boolean {
   );
 }
 
+/** Formato nuevo: 7 dígitos. Se aceptan 6 por los tickets ya emitidos. */
+export const TICKET_MAX_LONGITUD = 10; // "TK-" + 7 dígitos
+
 export function normalizarTicket(ticket: string): string {
   return ticket.trim().toUpperCase();
 }
 
 export function esTicketValido(ticket: string): boolean {
-  return /^TK-\d{6}$/.test(normalizarTicket(ticket));
+  // Los tickets nuevos llevan 7 dígitos; los antiguos (6) siguen siendo
+  // consultables para no dejar reportes existentes inaccesibles.
+  return /^TK-\d{6,7}$/.test(normalizarTicket(ticket));
 }
 
 /**
- * Dominios institucionales permitidos (NEXT_PUBLIC_DOMINIOS_CORREO, separados
- * por coma, p. ej. "universidad.edu.ve,est.universidad.edu.ve"). Vacío = sin
- * restricción. Se lee igual en cliente y servidor; el servidor es quien manda.
+ * Dominio institucional único y obligatorio. No se lee del entorno: si fuera
+ * configurable, un despliegue con la variable vacía aceptaría cualquier
+ * correo. El servidor es la autoridad; el cliente solo replica el mensaje.
  */
-export function dominiosPermitidos(): string[] {
-  return (process.env.NEXT_PUBLIC_DOMINIOS_CORREO ?? "")
-    .split(",")
-    .map((dominio) => dominio.trim().toLowerCase().replace(/^@/, ""))
-    .filter(Boolean);
-}
+export const DOMINIO_INSTITUCIONAL = "est.ucab.edu.ve";
 
 export function esCorreoInstitucional(correo: string): boolean {
-  const dominios = dominiosPermitidos();
-  if (dominios.length === 0) return true;
-
   const dominio = correo.trim().toLowerCase().split("@")[1] ?? "";
-  return dominios.some((permitido) => dominio === permitido);
+  return dominio === DOMINIO_INSTITUCIONAL;
 }
 
 export function mensajeCorreoInstitucional(): string {
-  const dominios = dominiosPermitidos();
-  return dominios.length > 0
-    ? `Usa tu correo institucional (${dominios.map((d) => `@${d}`).join(", ")}).`
-    : "Ingresa un correo electrónico válido.";
+  return `Usa tu correo institucional @${DOMINIO_INSTITUCIONAL}.`;
 }
 
 /** Oculta la parte local: ana.martinez@uni.edu.ve → a***@uni.edu.ve */

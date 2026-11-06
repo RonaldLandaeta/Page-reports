@@ -5,6 +5,7 @@ import { hashIp, ipDelCliente } from "@/lib/api/ip";
 import { leerCuerpo, respuestaError, texto } from "@/lib/api/respuestas";
 import {
   consultasBloqueadas,
+  intentosAdminPorCorreoBloqueados,
   registrarConsultaFallida,
   registrarIntentoAdmin,
 } from "@/lib/supabase/consultas";
@@ -34,6 +35,22 @@ export async function POST(request: Request) {
       return respuestaError("limite", "Demasiados intentos. Espera unos minutos.", 429);
     }
 
+    // Bloqueo por correo: frena ataques distribuidos con muchas IPs. El
+    // usuario aceptó el riesgo de que alguien bloquee una cuenta a propósito.
+    if (await intentosAdminPorCorreoBloqueados(correo)) {
+      await registrarIntentoAdmin({
+        correo,
+        ipHash,
+        exito: false,
+        motivo: "bloqueado",
+      });
+      return respuestaError(
+        "limite",
+        "Demasiados intentos para esta cuenta. Espera unos minutos.",
+        429,
+      );
+    }
+
     const resultado = await autenticarAdmin(correo, clave);
 
     if (!resultado.ok) {
@@ -48,7 +65,10 @@ export async function POST(request: Request) {
 
     await registrarIntentoAdmin({ correo, ipHash, exito: true, motivo: "ok" });
 
-    const response = NextResponse.json({ ok: true });
+    const response = NextResponse.json(
+      { ok: true },
+      { headers: { "Cache-Control": "no-store" } },
+    );
     iniciarSesionAdmin(response, resultado.admin);
     return response;
   } catch (error) {

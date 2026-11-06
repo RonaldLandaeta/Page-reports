@@ -15,7 +15,15 @@ export const CONFIG = {
   maxIntentosCodigo: 5,
   /** Consultas fallidas (ticket + cédula) permitidas por IP en la ventana. */
   maxConsultasFallidasPorIp: 10,
+  /**
+   * Consultas fallidas permitidas para una misma cédula en la ventana. Evita
+   * que muchas IP rotativas prueben tickets contra una cédula concreta.
+   */
+  maxConsultasFallidasPorCedula: 20,
   ventanaConsultasMinutos: 15,
+  /** Intentos fallidos de login de /admin permitidos por correo. */
+  maxIntentosAdminPorCorreo: 5,
+  ventanaIntentosAdminMinutos: 15,
   /**
    * Zona horaria que define el "día calendario" del límite diario.
    * Es fija para que el corte sea el mismo en el navegador y en el servidor
@@ -24,11 +32,11 @@ export const CONFIG = {
   zonaHoraria: "America/Caracas",
   /**
    * Muestra la consola JSON. Es un panel de desarrollo: expone cédula y
-   * motivo en pantalla. En producción queda apagada salvo que se active
-   * explícitamente con NEXT_PUBLIC_MOSTRAR_CONSOLA=true.
+   * motivo en pantalla, así que en producción SIEMPRE queda apagada. En
+   * desarrollo se enciende por defecto; `NEXT_PUBLIC_MOSTRAR_CONSOLA=false`
+   * la oculta.
    */
   mostrarConsola:
-    process.env.NEXT_PUBLIC_MOSTRAR_CONSOLA === "true" ||
-    (process.env.NEXT_PUBLIC_MOSTRAR_CONSOLA === undefined &&
-      process.env.NODE_ENV !== "production"),
+    process.env.NODE_ENV !== "production" &&
+    process.env.NEXT_PUBLIC_MOSTRAR_CONSOLA !== "false",
 } as const;

@@ -22,8 +22,11 @@ import {
   NOMBRE_MAX,
   NOMBRE_MIN,
   esCedulaValida,
+  esCorreoInstitucional,
   esCorreoValido,
+  mensajeCorreoInstitucional,
 } from "@/lib/validaciones";
+import { verificarTokenVerificacion } from "@/lib/verificacion-servidor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,8 +45,12 @@ export async function POST(request: Request) {
   const tipoError = texto(cuerpo, "tipo_error");
   const detalleEnviado = texto(cuerpo, "tipo_error_detalle").replace(/\s+/g, " ");
   const motivo = texto(cuerpo, "motivo");
+  const token = texto(cuerpo, "verificacionToken");
 
+  // El cliente envía el código único; nrc y nombre se resuelven en el servidor
+  // desde la malla local (el NRC solo no sirve: se repite entre carreras).
   const materia = buscarMateriaPorCodigo(materiaCodigo);
+
   const campos: Record<string, string> = {};
 
   if (!esCedulaValida(ci)) {
@@ -56,16 +63,19 @@ export async function POST(request: Request) {
 
   if (!esCorreoValido(correo)) {
     campos.correo = "Ingresa un correo electrónico válido.";
+  } else if (!esCorreoInstitucional(correo)) {
+    campos.correo = mensajeCorreoInstitucional();
   }
 
   if (!materia) {
-    campos.materia_codigo = "Selecciona una materia válida.";
+    campos.materia_codigo = "Selecciona una materia de la malla.";
   }
 
   if (!esTipoError(tipoError)) {
     campos.tipo_error = "Selecciona el tipo de error.";
   }
 
+  // «Especifica el error» solo aplica a "otro"; en los demás tipos se ignora.
   const detalle = tipoRequiereDetalle(tipoError) ? detalleEnviado : "";
 
   if (tipoRequiereDetalle(tipoError)) {
@@ -89,6 +99,27 @@ export async function POST(request: Request) {
     );
   }
 
+  let sesion: { correo: string; ci: string } | null = null;
+
+  try {
+    sesion = verificarTokenVerificacion(token);
+  } catch (error) {
+    console.error("[api/reportes] token no verificable.", error);
+    return respuestaError(
+      "interno",
+      "La verificación de correo no está configurada.",
+      500,
+    );
+  }
+
+  if (!sesion || sesion.correo !== correo || sesion.ci !== ci) {
+    return respuestaError(
+      "verificacion",
+      "Verifica tu correo antes de enviar el reporte.",
+      401,
+    );
+  }
+
   const input: ReporteNuevoDb = {
     ci,
     nombre,
@@ -104,13 +135,13 @@ export async function POST(request: Request) {
   let resultado: ResultadoCreacion;
 
   try {
-    // 1. Guardar en Supabase (la función helper asignará el prefijo TK o la secuencia de BD)
     resultado = await crearReporteEnDb(input);
   } catch (error) {
-    console.error("[api/reportes] Error al insertar en Supabase:", error);
+    // Puede fallar antes de llegar a Supabase (cliente sin configurar) o por red.
+    console.error("[api/reportes] no se pudo crear el reporte.", error);
     return respuestaError(
       "interno",
-      "No se pudo guardar el reporte en la base de datos.",
+      "No pudimos registrar el reporte. Intenta nuevamente.",
       500,
     );
   }
@@ -121,7 +152,11 @@ export async function POST(request: Request) {
         ? 409
         : resultado.codigo === "limite"
           ? 429
-          : 500;
+          : resultado.codigo === "validacion"
+            ? 422
+            : resultado.codigo === "verificacion"
+              ? 401
+              : 500;
 
     return respuestaError(
       resultado.codigo,
@@ -131,11 +166,11 @@ export async function POST(request: Request) {
     );
   }
 
-  // 2. Intento de envío de correo (best-effort)
+  // El correo es best-effort: si falla, el reporte ya quedó registrado.
   try {
     await enviarConfirmacionReporte(resultado.reporte);
   } catch (error) {
-    console.warn("[api/reportes] El correo no se envió, pero el reporte sí fue guardado:", error);
+    console.error("[api/reportes] confirmación por correo falló.", error);
   }
 
   return respuestaOk({ reporte: resultado.reporte }, 201);

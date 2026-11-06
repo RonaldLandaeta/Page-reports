@@ -450,7 +450,7 @@ export function FormularioTradicional({
               name="correo"
               type="email"
               autoComplete="email"
-              placeholder="nombre@correo-institucional.edu.ve"
+              placeholder="nombre@est.ucab.edu.ve"
               value={formulario.correo}
               onChange={(event) => actualizarCorreo(event.target.value)}
               required

@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   try {
     const ipHash = hashIp(ipDelCliente(request));
 
-    if (await consultasBloqueadas(ipHash)) {
+    if (await consultasBloqueadas(ipHash, ci)) {
       return respuestaError(
         "limite",
         "Demasiadas consultas fallidas. Espera unos minutos e intenta de nuevo.",
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     const reporte = await buscarReporteEnDb(ticket, ci);
 
     if (!reporte) {
-      await registrarConsultaFallida(ipHash);
+      await registrarConsultaFallida(ipHash, ci);
       // Mensaje genérico a propósito: no revelamos cuál dato falló.
       return respuestaError(
         "no_encontrado",

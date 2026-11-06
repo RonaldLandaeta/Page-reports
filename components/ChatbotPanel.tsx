@@ -115,7 +115,7 @@ const PREGUNTAS: Record<Paso, string> = {
 const PLACEHOLDERS: Record<Paso, string> = {
   ci: "Ej. 12345678",
   nombre: "Ej. Ana Martínez",
-  correo: "nombre@correo-institucional.edu.ve",
+  correo: "nombre@est.ucab.edu.ve",
   verificacion: "Código de 6 dígitos",
   nrc: "NRC, código o nombre de la materia",
   tipo_error: "Elige una opción o escríbela",

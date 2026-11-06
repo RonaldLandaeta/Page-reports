@@ -3,10 +3,11 @@
  *
  * Uso: npm run db:test
  *
- * Cubre tres escenarios:
+ * Cubre cuatro escenarios:
  *   1. Base nueva con supabase/setup.sql (y setup.sql dos veces seguidas).
  *   2. Base vieja (0001–0005) con datos → 0006 + 0007.
  *   3. Base vieja con datos → setup.sql completo.
+ *   4. Permisos/políticas creados a mano → 0009 los cierra.
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -103,7 +104,7 @@ async function aplicar(db, archivos) {
     )
     returning id, ticket, estado
   `);
-  afirmar(/^TK-\d{6}$/.test(alta.rows[0].ticket), "ticket por defecto TK-XXXXXX");
+  afirmar(/^TK-\d{7}$/.test(alta.rows[0].ticket), "ticket por defecto TK-XXXXXXX (7 dígitos)");
 
   const evento = await db.query(
     `select estado_nuevo from public.reporte_eventos where reporte_id = $1`,
@@ -145,6 +146,73 @@ async function aplicar(db, archivos) {
     rechazado = true;
   }
   afirmar(rechazado, "«otro» sin detalle es rechazado por el CHECK");
+
+  // 0008: alta atómica con reglas de negocio.
+  const rpc = (ci, materia, tipo, detalle = "") =>
+    db.query(
+      `select public.crear_reporte(
+         $1, 'Persona Prueba', 'persona@universidad.edu.ve', '02002',
+         $2, 'Materia de prueba', $3::public.tipo_error_reporte,
+         $4, 'Motivo suficientemente largo'
+       ) as r`,
+      [ci, materia, tipo, detalle],
+    );
+
+  const creado = await rpc("87654321", "FING-02002", "cruce-horario");
+  afirmar(creado.rows[0].r.ok === true, "crear_reporte inserta el reporte");
+
+  const duplicado = await rpc("87654321", "FING-02002", "cruce-horario");
+  afirmar(
+    duplicado.rows[0].r.codigo === "duplicado",
+    "crear_reporte detecta el duplicado de 24 h",
+  );
+  afirmar(
+    /^TK-\d{7}$/.test(creado.rows[0].r.reporte.ticket),
+    "crear_reporte genera tickets de 7 dígitos",
+  );
+
+  // La cédula no prueba identidad: otro correo no recibe el ticket ajeno.
+  const duplicadoAjeno = await db.query(
+    `select public.crear_reporte(
+       '87654321', 'Otra Persona', 'otra@universidad.edu.ve', '02002',
+       'FING-02002', 'Materia de prueba', 'cruce-horario',
+       '', 'Motivo suficientemente largo'
+     ) as r`,
+  );
+  afirmar(
+    duplicadoAjeno.rows[0].r.codigo === "duplicado" &&
+      duplicadoAjeno.rows[0].r.ticket === undefined,
+    "el ticket duplicado no se filtra a otro correo",
+  );
+
+  // Un correo institucional solo puede quedar vinculado a una cédula.
+  const correoDeOtraCedula = await db.query(
+    `select public.crear_reporte(
+       '12345678', 'Ana Prueba', 'persona@universidad.edu.ve', '02003',
+       'FING-02003', 'Otra materia', 'cruce-horario',
+       '', 'Motivo suficientemente largo'
+     ) as r`,
+  );
+  afirmar(
+    correoDeOtraCedula.rows[0].r.codigo === "validacion",
+    "un correo no puede usar una segunda cédula",
+  );
+
+  const intentoCedula = await db.query(`
+    insert into public.consulta_intentos (ip_hash, ci)
+    values ('hash-prueba', '12345678')
+    returning ci
+  `);
+  afirmar(
+    intentoCedula.rows[0].ci === "12345678",
+    "consulta_intentos guarda la cédula para el límite por cédula",
+  );
+
+  const otroSinDetalle = await rpc("87654321", "FING-02003", "otro", "   ");
+  afirmar(
+    otroSinDetalle.rows[0].r.codigo === "validacion",
+    "crear_reporte exige detalle para «otro»",
+  );
 
   // Auditoría de login y cambio de estado por lotes (0007, secciones 10 y 11).
   const aud = await db.query(`
@@ -249,6 +317,9 @@ async function aplicar(db, archivos) {
     eventos.rows[0].total === 2,
     "setup.sql es idempotente al ejecutarse dos veces",
   );
+
+  await db.exec(await migracion("0010_ticket_consultas.sql"));
+  afirmar(true, "0010 es idempotente al ejecutarse dos veces");
 
   await db.close();
 }
@@ -382,6 +453,137 @@ async function aplicar(db, archivos) {
   afirmar(fila.rows[0].materia_codigo === "54321", "datos viejos conservados");
   afirmar(fila.rows[0].tipo_error === "cruce-horario", "tipo convertido");
   afirmar(fila.rows[0].estado === "en-revision", "estado conservado");
+
+  await db.close();
+}
+
+// ── Escenario 4: políticas manuales y permisos abiertos → 0009 los cierra ──
+{
+  console.log("\n[4] políticas manuales y permisos abiertos → 0009");
+  const db = new PGlite();
+  await prepararRoles(db);
+
+  await aplicar(db, [
+    "0001_init.sql",
+    "0002_auditoria.sql",
+    "0003_admin.sql",
+    "0004_permisos.sql",
+    "0005_catalogo_local.sql",
+    "0006_malla_local.sql",
+    "0007_esquema_consistente.sql",
+    "0008_crear_reporte_atomico.sql",
+    "0010_ticket_consultas.sql",
+  ]);
+
+  // Reproduce lo que había en el proyecto real: permisos por defecto de
+  // Supabase para anon/authenticated + políticas añadidas desde el panel.
+  await db.exec(`
+    grant select, insert on public.reportes to anon, authenticated;
+    grant select on public.administradores to authenticated;
+    create policy "Permitir lectura de reportes" on public.reportes
+      for select to public using (true);
+    create policy "Permitir inserción pública de reportes" on public.reportes
+      for insert to public with check (true);
+    create policy "Permitir lectura de administradores"
+      on public.administradores for select to authenticated using (true);
+  `);
+
+  const privilegio = async (rol, tabla, tipo) =>
+    (await db.query(
+      `select has_table_privilege($1, $2, $3) as v`,
+      [rol, `public.${tabla}`, tipo],
+    )).rows[0].v;
+
+  afirmar(
+    await privilegio("anon", "reportes", "select"),
+    "(deriva reproducida) anon podía leer reportes",
+  );
+
+  // Alta con la función atómica: el ticket solo vuelve al mismo correo.
+  const alta = (correo) =>
+    db.query(
+      `select public.crear_reporte(
+         '12345678', 'Ana Prueba', $1, '1', 'FING-02002', 'Álgebra',
+         'cruce-horario', '', 'Motivo suficientemente largo'
+       ) as r`,
+      [correo],
+    );
+
+  const primero = (await alta("ana@universidad.edu.ve")).rows[0].r;
+  afirmar(
+    primero.ok === true && /^TK-\d{7}$/.test(primero.reporte.ticket),
+    "crear_reporte crea el reporte con ticket de 7 dígitos",
+  );
+
+  const propio = (await alta("ana@universidad.edu.ve")).rows[0].r;
+  afirmar(
+    propio.codigo === "duplicado" &&
+      propio.ticket === primero.reporte.ticket,
+    "el mismo correo recibe su ticket duplicado",
+  );
+
+  const ajeno = (await alta("otra@universidad.edu.ve")).rows[0].r;
+  afirmar(
+    ajeno.codigo === "duplicado" && ajeno.ticket === undefined,
+    "otro correo NO recibe el ticket ajeno",
+  );
+
+  await db.exec(await migracion("0009_cerrar_acceso_publico.sql"));
+  await db.exec(await migracion("0009_cerrar_acceso_publico.sql"));
+  afirmar(true, "0009 es idempotente");
+
+  const politicas = await db.query(
+    `select count(*)::int as n from pg_policies where schemaname = 'public'`,
+  );
+  afirmar(politicas.rows[0].n === 0, "no queda ninguna política en public");
+
+  for (const rol of ["anon", "authenticated"]) {
+    for (const tabla of [
+      "reportes",
+      "reporte_eventos",
+      "administradores",
+      "codigos_verificacion",
+      "admin_intentos",
+      "consulta_intentos",
+    ]) {
+      for (const tipo of ["select", "insert", "update", "delete"]) {
+        if (await privilegio(rol, tabla, tipo)) {
+          throw new Error(`FALLO: ${rol} aún tiene ${tipo} en ${tabla}`);
+        }
+      }
+    }
+  }
+  afirmar(true, "anon y authenticated no tienen ningún permiso sobre las tablas");
+
+  afirmar(
+    (await privilegio("service_role", "reportes", "select")) &&
+      (await privilegio("service_role", "reportes", "insert")),
+    "service_role conserva sus permisos",
+  );
+
+  const ejecutar = async (rol, firma) =>
+    (await db.query(
+      `select has_function_privilege($1, $2, 'execute') as v`,
+      [rol, firma],
+    )).rows[0].v;
+  const firmaAlta =
+    "public.crear_reporte(text,text,text,text,text,text,public.tipo_error_reporte,text,text)";
+  afirmar(
+    !(await ejecutar("anon", firmaAlta)) &&
+      !(await ejecutar("authenticated", firmaAlta)),
+    "anon/authenticated no pueden ejecutar crear_reporte",
+  );
+  afirmar(
+    await ejecutar("service_role", firmaAlta),
+    "service_role sí puede ejecutar crear_reporte",
+  );
+
+  // Una tabla nueva ya no hereda permisos para anon.
+  await db.exec(`create table public.prueba_futura (id int)`);
+  afirmar(
+    !(await privilegio("anon", "prueba_futura", "select")),
+    "las tablas nuevas nacen cerradas para anon",
+  );
 
   await db.close();
 }

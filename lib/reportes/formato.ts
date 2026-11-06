@@ -45,7 +45,8 @@ const COLUMNAS_EXPORTACION = [
 
 /** Evita que Excel/Sheets ejecute como fórmula una celda escrita por un usuario. */
 function neutralizarFormula(valor: string): string {
-  return /^[=+\-@\t\r]/.test(valor) ? `'${valor}` : valor;
+  // También cubre espacios (incluido NBSP) delante del carácter peligroso.
+  return /^[\s\u00a0]*[=+\-@]|^[\t\r]/.test(valor) ? `'${valor}` : valor;
 }
 
 function celdaCsv(valor: string): string {

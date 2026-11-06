@@ -36,8 +36,16 @@ export function urlSupabase(): string {
     );
   }
 
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL debe usar http o https.");
+  const esLocal = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && esLocal)) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL debe usar https (http solo para localhost).",
+    );
+  }
+
+  if (url.protocol === "http:" && process.env.NODE_ENV === "production") {
+    throw new Error("En producción NEXT_PUBLIC_SUPABASE_URL debe usar https.");
   }
 
   const ruta = url.pathname.replace(/\/+$/, "");
@@ -131,6 +139,14 @@ export function claveServiceRole(): string {
   if (valor.startsWith("sb_publishable_")) {
     throw new Error(
       "SUPABASE_SERVICE_ROLE_KEY contiene una clave publicable. Usa la clave secreta (service_role / sb_secret_…).",
+    );
+  }
+
+  const rol = rolDeClave(valor);
+
+  if (rol && rol !== "service_role") {
+    throw new Error(
+      `SUPABASE_SERVICE_ROLE_KEY tiene el rol «${rol}»; debe ser service_role.`,
     );
   }
 

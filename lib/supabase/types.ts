@@ -127,16 +127,19 @@ export type Database = {
       }
       consulta_intentos: {
         Row: {
+          ci: string | null
           creado_en: string
           id: number
           ip_hash: string
         }
         Insert: {
+          ci?: string | null
           creado_en?: string
           id?: never
           ip_hash: string
         }
         Update: {
+          ci?: string | null
           creado_en?: string
           id?: never
           ip_hash?: string
@@ -260,6 +263,20 @@ export type Database = {
         Returns: number
       }
       consumir_codigo: { Args: { p_id: string }; Returns: boolean }
+      crear_reporte: {
+        Args: {
+          p_ci: string
+          p_correo: string
+          p_materia_codigo: string
+          p_materia_nombre: string
+          p_motivo: string
+          p_nombre: string
+          p_nrc: string
+          p_tipo_error: Database["public"]["Enums"]["tipo_error_reporte"]
+          p_tipo_error_detalle: string
+        }
+        Returns: Json
+      }
       limpiar_codigos_vencidos: { Args: never; Returns: undefined }
       registrar_intento_codigo: { Args: { p_id: string }; Returns: number }
     }

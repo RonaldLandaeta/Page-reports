@@ -58,7 +58,7 @@ Malla curricular ── vive en el repositorio (lib/materias), nunca en Supabase
   - Duplicado con la misma cédula + `materia_codigo` + tipo de error en 24
     horas (así `FING-02002` y `TELE-02002` son reportes distintos).
   - Máximo 5 reportes por cédula por día calendario (`America/Caracas`).
-- **Ticket único** `TK-XXXXXX` generado por la API.
+- **Ticket único** `TK-XXXXXXX` (7 dígitos) generado por la API.
 - **Consulta protegida** por ticket + cédula, sin revelar cuál dato falló.
 - **Correo de confirmación** con el ticket (best-effort: si falla, el reporte
   ya quedó registrado).
@@ -126,7 +126,7 @@ Si deseas clonar y probar la aplicación en un entorno local:
 
 1. **Clonar el repositorio e instalar dependencias:**
    ```bash
-   git clone [https://github.com/tu-usuario/reporte-horarios.git](https://github.com/tu-usuario/reporte-horarios.git)
+   git clone https://github.com/tu-usuario/reporte-horarios.git
    cd reporte-horarios
    npm install
 
@@ -138,7 +138,6 @@ Si deseas clonar y probar la aplicación en un entorno local:
 | `POST` | `/api/verificacion/validar`   | Valida el código y devuelve un token firmado.    |
 | `POST` | `/api/reportes`               | Crea el reporte (exige token de verificación).   |
 | `POST` | `/api/reportes/consultar`     | Consulta por ticket + cédula (POST evita la CI en logs/URL). |
-| `GET`  | `/api/salud`                  | Diagnóstico: variables, Supabase y catálogo local. |
 
 Contrato de error:
 
@@ -147,7 +146,7 @@ Contrato de error:
   "ok": false,
   "codigo": "duplicado",
   "mensaje": "Ya registraste un reporte...",
-  "ticket": "TK-123456"
+  "ticket": "TK-1234567"
 }
 ```
 
@@ -161,7 +160,7 @@ desde la malla local):
 {
   "ci": "12345678",
   "nombre": "Ana Martínez",
-  "correo": "ana@universidad.edu.ve",
+  "correo": "ana@est.ucab.edu.ve",
   "materia_codigo": "TELE-02002",
   "tipo_error": "otro",
   "tipo_error_detalle": "La sección no aparece en mi reserva",
@@ -206,7 +205,7 @@ no salen en este archivo (están en el CSV).
 ```json
 {
   "estudiantes": [
-    { "ci": "28123456", "nombre": "Carlos Mendoza", "correo": "carlos@universidad.edu.ve" }
+    { "ci": "28123456", "nombre": "Carlos Mendoza", "correo": "carlos@est.ucab.edu.ve" }
   ],
   "reportes": [
     {
@@ -232,39 +231,22 @@ no salen en este archivo (están en el CSV).
 * `horario` sale de la malla local; si el código ya no existe en la malla
   queda vacío.
 
-### Diagnóstico rápido
+### Diagnóstico
 
-`GET /api/salud` comprueba, sin exponer claves:
-
-- que `NEXT_PUBLIC_SUPABASE_URL` (o `SUPABASE_URL`) sea válida;
-- que `SUPABASE_SERVICE_ROLE_KEY` sea la clave `service_role`;
-- que exista `NEXT_PUBLIC_SUPABASE_ANON_KEY`;
-- que `VERIFICACION_SECRET` tenga al menos 32 caracteres;
-- que existan las tablas `reportes`, `reporte_eventos`,
-  `codigos_verificacion`, `consulta_intentos` y `administradores`;
-- que las columnas de `reportes` coincidan con `lib/supabase/types.ts`
-  (detecta bases con migraciones viejas);
-- cuántas materias tiene el catálogo local (`lib/materias/index.ts`) y cuántos
-  reportes hay registrados.
-
-Además devuelve:
-
-- `proyecto`: host del Supabase usado (p. ej. `abcd.supabase.co`). No es un
-  secreto; sirve para comparar local y producción.
-- `fuenteUrl`: `SUPABASE_URL` o `NEXT_PUBLIC_SUPABASE_URL`, según cuál se usó.
-  Recuerda que `SUPABASE_URL` tiene prioridad en el servidor.
-
-Si `ok` es `false`, el campo `mensaje` indica qué revisar. Los fallos también
-aparecen en los logs de Vercel con el prefijo `[api/salud]`.
+Los errores de configuración (variables faltantes, URL inválida o clave con el
+rol equivocado) se registran en los logs de Vercel con el prefijo
+`[supabase/...]` o `[api/...]`. No hay un endpoint público de diagnóstico: así
+no se expone el estado interno del proyecto.
 
 > Si los reportes fallan con un error de columna (`materia_codigo` o
-> `tipo_error_detalle` inexistentes) o de tipo (`estado`/`tipo_error` como
-> texto en vez de enum), ejecuta `supabase/setup.sql` completo o la migración
-> `0007_esquema_consistente.sql` en el proyecto que muestra `proyecto`.
+> `tipo_error_detalle` inexistentes), de tipo (`estado`/`tipo_error` como
+> texto en vez de enum) o de función (`crear_reporte` inexistente), ejecuta
+> `supabase/setup.sql` completo o las migraciones pendientes (la última es
+> `0010_ticket_consultas.sql`).
 
 ### Comprobaciones en Supabase
 
-Si `/api/salud` responde `ok: false`, revisa en el SQL Editor:
+Si algo falla, revisa en el SQL Editor:
 
 ```sql
 -- ¿Existen todas las tablas?
@@ -280,6 +262,7 @@ where proname in (
   'registrar_intento_codigo',
   'consumir_codigo',
   'cambiar_estado_reporte',
+  'crear_reporte',
   'limpiar_codigos_vencidos'
 )
 order by proname;
@@ -313,6 +296,9 @@ completo. Es idempotente.
 - `0004_permisos.sql` concede a `service_role` los permisos de tabla y
   secuencia que necesita la Data API, aunque la exposición automática esté
   desactivada.
+- `0009_cerrar_acceso_publico.sql` borra cualquier política creada a mano,
+  deja RLS activo y retira todos los permisos de tablas, secuencias y
+  funciones a `anon` y `authenticated`; las tablas nuevas nacen cerradas.
 - La escritura de reportes se hace con `service_role`; las funciones SQL de
   verificación tienen `EXECUTE` revocado para `anon`/`authenticated`.
 - El token de verificación queda ligado a una cédula (una cédula puede tener
@@ -323,13 +309,38 @@ completo. Es idempotente.
   (20/hora).
 - Intentos de código contados y canje del código hechos de forma atómica en
   Postgres.
-- Consulta por ticket + cédula: máximo 10 consultas fallidas por IP cada 15
-  min; el correo se devuelve enmascarado.
-- Solo correos de `NEXT_PUBLIC_DOMINIOS_CORREO` pueden verificarse.
-- Cabeceras de seguridad en `next.config.ts`.
-- La consola JSON muestra cédula y motivo: en producción está apagada salvo
-<<<<<<< HEAD
-  que pongas `NEXT_PUBLIC_MOSTRAR_CONSOLA=true`.
-=======
-  que pongas `NEXT_PUBLIC_MOSTRAR_CONSOLA=true`.
->>>>>>> origin/main
+- **Solo se acepta el dominio institucional exacto `@est.ucab.edu.ve`**, tanto
+  al pedir el código como al crear el reporte. No se configura por variable.
+- **Un correo institucional solo puede quedar vinculado a una cédula**: se
+  comprueba al validar el código y otra vez, de forma atómica, en
+  `crear_reporte`.
+- Consulta por ticket + cédula: máximo 10 consultas fallidas por IP y 20 por
+  cédula cada 15 min; el correo se devuelve enmascarado.
+- Login de `/admin`: máximo 10 intentos fallidos por IP y 5 por correo cada
+  15 min (el bloqueo por correo frena ataques distribuidos; también permite
+  bloquear una cuenta a propósito, decisión aceptada).
+- La sesión de administrador usa una cookie `httpOnly` firmada con prefijo
+  `__Host-` en producción (sin `Domain`, `Secure` y `Path=/`).
+- La creación del reporte es atómica en Postgres (`crear_reporte`): un
+  advisory lock por cédula y por correo impide saltarse el duplicado de 24 h,
+  el límite diario o la regla «un correo, una cédula» con peticiones
+  simultáneas. En producción no hay ruta de respaldo: si falta la función, la
+  API falla de forma visible. Ejecuta `supabase/setup.sql` para actualizarla.
+- El ticket duplicado solo se devuelve a quien usa el mismo correo verificado;
+  a cualquier otra persona solo se le informa que el reporte ya existe.
+- Los tickets nuevos llevan **7 dígitos** (`TK-1234567`); los antiguos de 6
+  siguen siendo consultables.
+- Las peticiones JSON tienen un tope de 64 KB y las respuestas de API llevan
+  `Cache-Control: no-store`.
+- La IP solo se toma de cabeceras de proxy cuando la plataforma las controla
+  (Vercel/Cloudflare) o cuando se activa `TRUST_PROXY_HEADERS=true`. El valor
+  se valida con `net.isIP()`, así que una cabecera falsa o basura no sirve
+  para saltarse los límites.
+- Cabeceras de seguridad en `next.config.ts`: CSP, HSTS (solo producción),
+  `X-Frame-Options`, `Cross-Origin-Opener-Policy`,
+  `Cross-Origin-Resource-Policy`, `Permissions-Policy` y `nosniff`.
+- El correo nunca simula un envío exitoso: si no hay proveedor o falla, la API
+  responde con error y no entrega el código (en desarrollo puede mostrar el
+  código con `MOSTRAR_CODIGO_DEMO=true`).
+- La consola JSON muestra cédula y motivo: solo existe en desarrollo y en
+  producción siempre queda apagada.
