@@ -8,7 +8,12 @@ import {
   getTipoErrorLabel,
 } from "@/lib/catalogos";
 import { CONFIG } from "@/lib/config";
-import { fechaLocal, reportesACsv } from "@/lib/reportes/formato";
+import { buscarMateriaPorCodigo } from "@/lib/materias";
+import {
+  fechaLocal,
+  reportesACsv,
+  reportesADatosIngreso,
+} from "@/lib/reportes/formato";
 import { obtenerSupabaseAdmin } from "@/lib/supabase/admin";
 import { CAMPOS_PUBLICOS, mapearReporte } from "@/lib/supabase/reportes";
 import type { EstadoReporte, Reporte } from "@/lib/types";
@@ -78,6 +83,7 @@ async function cambiarEstadoPorLotes(
   ids: string[],
   estado: EstadoReporte,
   nota: string,
+  adminEmail: string,
 ): Promise<number> {
   const supabase = obtenerSupabaseAdmin();
   let cambiados = 0;
@@ -87,6 +93,7 @@ async function cambiarEstadoPorLotes(
       p_ids: ids.slice(i, i + TAMANO_LOTE_RPC),
       p_estado: estado,
       p_nota: nota || undefined,
+      p_admin: adminEmail,
     });
 
     if (error) throw error;
@@ -125,6 +132,8 @@ export async function GET(request: Request) {
  * Acciones por lote:
  *  - { accion: "estado", ids, estado, nota? }
  *  - { accion: "descargar", formato: "csv" | "json", ids? | estado?, q? }
+ *    El formato "json" produce el datos.json de app_ingresos
+ *    ({ estudiantes, reportes }); "csv" es la hoja completa para Excel.
  *    Al descargar, los «pendiente» pasan a «en-revision» (queda en el historial).
  */
 export async function POST(request: Request) {
@@ -144,7 +153,7 @@ export async function POST(request: Request) {
         return respuestaError("validacion", "Datos inválidos.", 422);
       }
 
-      const cambiados = await cambiarEstadoPorLotes(ids, estado, nota);
+      const cambiados = await cambiarEstadoPorLotes(ids, estado, nota, admin.email);
       return respuestaOk({ cambiados, total: ids.length });
     }
 
@@ -192,7 +201,8 @@ export async function POST(request: Request) {
         marcados = await cambiarEstadoPorLotes(
           pendientes,
           "en-revision",
-          `Descargado por ${admin.email}`,
+          "Descarga de reportes",
+          admin.email,
         );
 
         const marcadosSet = new Set(pendientes);
@@ -202,11 +212,21 @@ export async function POST(request: Request) {
       }
 
       const marca = fechaLocal(new Date(), CONFIG.zonaHoraria).replace(/[: ]/g, "-");
-      const nombre = `reportes-${marca}.${formato}`;
+      // El JSON es el «datos.json» de app_ingresos; el CSV es para Excel.
+      const nombre =
+        formato === "json" ? `datos-${marca}.json` : `reportes-${marca}.csv`;
 
       const cuerpoArchivo =
         formato === "json"
-          ? JSON.stringify(reportes, null, 2)
+          ? JSON.stringify(
+              reportesADatosIngreso(
+                reportes,
+                getTipoErrorLabel,
+                (codigo) => buscarMateriaPorCodigo(codigo)?.horario,
+              ),
+              null,
+              2,
+            )
           : reportesACsv(
               reportes,
               { estado: getEstadoReporteLabel, tipo: getTipoErrorLabel },

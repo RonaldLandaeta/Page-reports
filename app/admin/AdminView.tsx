@@ -69,7 +69,13 @@ function CheckboxGrupo({
   );
 }
 
-export function AdminView({ miUserId }: { miUserId: string }) {
+export function AdminView({
+  miUserId,
+  esSuper,
+}: {
+  miUserId: string;
+  esSuper: boolean;
+}) {
   const router = useRouter();
   const [reportes, setReportes] = useState<Reporte[]>([]);
   const [total, setTotal] = useState(0);
@@ -538,16 +544,19 @@ export function AdminView({ miUserId }: { miUserId: string }) {
         })}
       </ul>
 
-      <PanelAdministradores miUserId={miUserId} onSesionCaducada={irAlLogin} />
+      {esSuper && <PanelAdministradores miUserId={miUserId} onSesionCaducada={irAlLogin} />}
     </main>
   );
 }
 
 // ── Gestión de administradores ──────────────────────────────────────────────
 
+type Rol = "admin" | "super";
+
 interface AdministradorFila {
   userId: string;
   email: string;
+  rol: Rol;
   creadoEn: string;
 }
 
@@ -562,6 +571,7 @@ function PanelAdministradores({
   const [lista, setLista] = useState<AdministradorFila[]>([]);
   const [correo, setCorreo] = useState("");
   const [clave, setClave] = useState("");
+  const [rol, setRol] = useState<Rol>("admin");
   const [cargando, setCargando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -605,7 +615,7 @@ function PanelAdministradores({
       const respuesta = await fetch("/api/admin/administradores", {
         method: "POST",
         headers: JSON_HEADERS,
-        body: JSON.stringify({ correo, clave }),
+        body: JSON.stringify({ correo, clave, rol }),
       });
 
       if (respuesta.status === 401) {
@@ -623,9 +633,42 @@ function PanelAdministradores({
       );
       setCorreo("");
       setClave("");
+      setRol("admin");
       await cargar();
     } catch (fallo) {
       setError(fallo instanceof Error && fallo.message ? fallo.message : "No pudimos agregar al administrador.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function cambiarRol(fila: AdministradorFila, nuevo: Rol) {
+    const accion = nuevo === "super" ? "hacer super administrador a" : "quitar el rol de super administrador a";
+    if (enviando || !window.confirm(`¿Seguro que quieres ${accion} ${fila.email}?`)) return;
+
+    setEnviando(true);
+    setError(null);
+    setAviso(null);
+
+    try {
+      const respuesta = await fetch("/api/admin/administradores", {
+        method: "PATCH",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ id: fila.userId, rol: nuevo }),
+      });
+
+      if (respuesta.status === 401) {
+        onSesionCaducada();
+        return;
+      }
+
+      const datos = await leerRespuesta(respuesta);
+      if (!datos.ok) throw new Error(datos.mensaje);
+
+      setAviso(`Rol actualizado: ${fila.email} ahora es ${nuevo === "super" ? "super administrador" : "administrador"}.`);
+      await cargar();
+    } catch (fallo) {
+      setError(fallo instanceof Error && fallo.message ? fallo.message : "No pudimos cambiar el rol.");
     } finally {
       setEnviando(false);
     }
@@ -684,12 +727,22 @@ function PanelAdministradores({
                 <span className="break-all text-slate-800 dark:text-slate-200">
                   {fila.email}
                   {fila.userId === miUserId && <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">(tú)</span>}
+                  <span className={`ml-2 rounded-full px-2 py-0.5 text-xs font-semibold ${fila.rol === "super" ? "bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"}`}>
+                    {fila.rol === "super" ? "Super admin" : "Admin"}
+                  </span>
                 </span>
                 {fila.userId !== miUserId && (
-                  <button type="button" disabled={enviando} onClick={() => void quitar(fila)}
-                    className="rounded-lg border border-rose-200 dark:border-rose-500/30 px-3 py-1 text-xs font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-500/15 disabled:opacity-50">
-                    Quitar acceso
-                  </button>
+                  <span className="flex flex-wrap gap-2">
+                    <button type="button" disabled={enviando}
+                      onClick={() => void cambiarRol(fila, fila.rol === "super" ? "admin" : "super")}
+                      className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
+                      {fila.rol === "super" ? "Quitar super" : "Hacer super"}
+                    </button>
+                    <button type="button" disabled={enviando} onClick={() => void quitar(fila)}
+                      className="rounded-lg border border-rose-200 dark:border-rose-500/30 px-3 py-1 text-xs font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-500/15 disabled:opacity-50">
+                      Quitar acceso
+                    </button>
+                  </span>
                 )}
               </li>
             ))}
@@ -708,6 +761,14 @@ function PanelAdministradores({
               <input id="nuevo-admin-clave" type="password" minLength={10} maxLength={72}
                 autoComplete="new-password" value={clave}
                 onChange={(e) => setClave(e.target.value)} className={`${campo} mt-1 w-full`} />
+            </div>
+            <div>
+              <label htmlFor="nuevo-admin-rol" className="block text-xs font-medium text-slate-600">Rol</label>
+              <select id="nuevo-admin-rol" value={rol} onChange={(e) => setRol(e.target.value as Rol)}
+                className={`${campo} mt-1`}>
+                <option value="admin">Admin</option>
+                <option value="super">Super admin</option>
+              </select>
             </div>
             <button type="submit" disabled={enviando} className={botonPrimario}>
               {enviando ? "Guardando..." : "Autorizar"}

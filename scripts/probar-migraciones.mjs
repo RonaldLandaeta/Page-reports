@@ -187,6 +187,59 @@ async function aplicar(db, archivos) {
     "la nota del lote queda en el historial",
   );
 
+  const autor = await db.query(
+    `select public.cambiar_estado_lote($1::uuid[], 'resuelto'::public.estado_reporte, 'Listo', 'admin@ucab.edu.ve') as n`,
+    [idsLote],
+  );
+  afirmar(autor.rows[0].n === 2, "el lote vuelve a cambiar el estado");
+  const eventoAutor = await db.query(
+    `select admin_email, nota from public.reporte_eventos
+     where reporte_id = $1 order by id desc limit 1`,
+    [idsLote[0]],
+  );
+  afirmar(
+    eventoAutor.rows[0].admin_email === "admin@ucab.edu.ve" &&
+      eventoAutor.rows[0].nota === "Listo",
+    "el historial guarda quién hizo el cambio (admin_email)",
+  );
+
+  await db.exec(`
+    insert into auth.users (id) values
+      ('00000000-0000-0000-0000-0000000000a1'),
+      ('00000000-0000-0000-0000-0000000000a2');
+    insert into public.administradores (user_id, rol) values
+      ('00000000-0000-0000-0000-0000000000a1', 'super'),
+      ('00000000-0000-0000-0000-0000000000a2', 'admin');
+  `);
+
+  const intentar = async (sql) => {
+    try {
+      await db.exec(sql);
+      return false;
+    } catch {
+      return true;
+    }
+  };
+
+  afirmar(
+    await intentar(`update public.administradores set rol = 'jefe'`),
+    "rol inválido rechazado por el CHECK",
+  );
+  afirmar(
+    await intentar(`delete from public.administradores where user_id = '00000000-0000-0000-0000-0000000000a1'`),
+    "no se puede borrar al último super",
+  );
+  afirmar(
+    await intentar(`update public.administradores set rol = 'admin' where user_id = '00000000-0000-0000-0000-0000000000a1'`),
+    "no se puede degradar al último super",
+  );
+
+  await db.exec(`update public.administradores set rol = 'super' where user_id = '00000000-0000-0000-0000-0000000000a2'`);
+  afirmar(
+    !(await intentar(`update public.administradores set rol = 'admin' where user_id = '00000000-0000-0000-0000-0000000000a1'`)),
+    "con dos super sí se puede degradar a uno",
+  );
+
   await db.exec(setup);
   const eventos = await db.query(
     `select count(*)::int as total from public.reporte_eventos where reporte_id = $1`,
@@ -231,6 +284,15 @@ async function aplicar(db, archivos) {
     )
   `);
 
+  await db.exec(`
+    insert into auth.users (id) values
+      ('00000000-0000-0000-0000-0000000000b1'),
+      ('00000000-0000-0000-0000-0000000000b2');
+    insert into public.administradores (user_id, creado_en) values
+      ('00000000-0000-0000-0000-0000000000b2', now()),
+      ('00000000-0000-0000-0000-0000000000b1', now() - interval '2 days');
+  `);
+
   await aplicar(db, ["0006_malla_local.sql", "0007_esquema_consistente.sql"]);
 
   const fila = await db.query(`
@@ -265,8 +327,22 @@ async function aplicar(db, archivos) {
   `);
   afirmar(historial.rows.length >= 1, "historial reconstruido para el reporte viejo");
 
+
+  const roles = await db.query(
+    `select user_id, rol from public.administradores order by user_id`,
+  );
+  afirmar(
+    roles.rows[0].rol === "super" && roles.rows[1].rol === "admin",
+    "el administrador más antiguo pasa a ser super",
+  );
+
   await db.exec(await migracion("0007_esquema_consistente.sql"));
   afirmar(true, "0007 es idempotente al ejecutarse dos veces");
+
+  const rolesDespues = await db.query(
+    `select count(*)::int as n from public.administradores where rol = 'super'`,
+  );
+  afirmar(rolesDespues.rows[0].n === 1, "repetir 0007 no crea más super");
 
   await db.close();
 }

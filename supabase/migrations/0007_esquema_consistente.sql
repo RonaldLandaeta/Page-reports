@@ -198,16 +198,25 @@ delete from public.reporte_eventos e
         and anterior.id < e.id
    );
 
--- 7) cambiar_estado_reporte con el enum (misma firma pública para la API) ----
+-- 7) cambiar_estado_reporte con el enum y quién hizo el cambio ----------------
+-- El historial guarda el correo del administrador (admin_email). Es nulo en
+-- los eventos automáticos (creación del reporte).
+alter table public.reporte_eventos
+  add column if not exists admin_email text;
+
 drop function if exists public.cambiar_estado_reporte(uuid, text, text);
 drop function if exists public.cambiar_estado_reporte(
   uuid, public.estado_reporte, text
+);
+drop function if exists public.cambiar_estado_reporte(
+  uuid, public.estado_reporte, text, text
 );
 
 create or replace function public.cambiar_estado_reporte(
   p_id     uuid,
   p_estado public.estado_reporte,
-  p_nota   text default null
+  p_nota   text default null,
+  p_admin  text default null
 )
 returns jsonb
 language plpgsql
@@ -236,15 +245,16 @@ begin
 
   update public.reportes set estado = p_estado where id = p_id;
 
-  if p_nota is not null and btrim(p_nota) <> '' then
-    update public.reporte_eventos
-       set nota = left(btrim(p_nota), 500)
-     where id = (
-       select max(id)
-         from public.reporte_eventos
-        where reporte_id = p_id
-     );
-  end if;
+  -- El trigger registrar_cambio_estado acaba de crear el evento: se le agrega
+  -- la nota y el administrador que hizo el cambio.
+  update public.reporte_eventos
+     set nota = coalesce(nullif(left(btrim(coalesce(p_nota, '')), 500), ''), nota),
+         admin_email = nullif(left(btrim(coalesce(p_admin, '')), 254), '')
+   where id = (
+     select max(id)
+       from public.reporte_eventos
+      where reporte_id = p_id
+   );
 
   return jsonb_build_object('ok', true, 'cambio', true);
 end;
@@ -253,11 +263,11 @@ $$;
 revoke all on function public.registrar_evento_inicial()
   from PUBLIC, anon, authenticated;
 revoke all on function public.cambiar_estado_reporte(
-  uuid, public.estado_reporte, text
+  uuid, public.estado_reporte, text, text
 ) from PUBLIC, anon, authenticated;
 
 grant execute on function public.cambiar_estado_reporte(
-  uuid, public.estado_reporte, text
+  uuid, public.estado_reporte, text, text
 ) to service_role;
 
 -- 8) Permisos de la secuencia nueva -----------------------------------------
@@ -272,6 +282,8 @@ comment on column public.reporte_eventos.estado_anterior is
   'Estado previo; null en el evento inicial.';
 comment on column public.reporte_eventos.estado_nuevo is
   'Estado resultante del cambio.';
+comment on column public.reporte_eventos.admin_email is
+  'Correo del administrador que hizo el cambio; null en eventos automáticos.';
 
 notify pgrst, 'reload schema';
 
@@ -299,12 +311,20 @@ comment on table public.admin_intentos is
   'Auditoría de login de /admin: correo, IP hasheada, resultado y motivo.';
 
 -- 11) Cambio de estado por lotes ---------------------------------------------
--- Reutiliza cambiar_estado_reporte para conservar historial y notas. Los ids
--- se ordenan para que dos lotes simultáneos no se bloqueen entre sí.
+-- Reutiliza cambiar_estado_reporte para conservar historial, nota y autor. Los
+-- ids se ordenan para que dos lotes simultáneos no se bloqueen entre sí.
+drop function if exists public.cambiar_estado_lote(
+  uuid[], public.estado_reporte, text
+);
+drop function if exists public.cambiar_estado_lote(
+  uuid[], public.estado_reporte, text, text
+);
+
 create or replace function public.cambiar_estado_lote(
   p_ids    uuid[],
   p_estado public.estado_reporte,
-  p_nota   text default null
+  p_nota   text default null,
+  p_admin  text default null
 )
 returns integer
 language plpgsql
@@ -330,7 +350,7 @@ begin
     from (select distinct unnest(p_ids) as x) ids;
 
   foreach v_id in array v_ordenado loop
-    v_res := public.cambiar_estado_reporte(v_id, p_estado, p_nota);
+    v_res := public.cambiar_estado_reporte(v_id, p_estado, p_nota, p_admin);
 
     if coalesce((v_res ->> 'cambio')::boolean, false) then
       v_cambios := v_cambios + 1;
@@ -342,11 +362,67 @@ end;
 $$;
 
 revoke all on function public.cambiar_estado_lote(
-  uuid[], public.estado_reporte, text
+  uuid[], public.estado_reporte, text, text
 ) from PUBLIC, anon, authenticated;
 
 grant execute on function public.cambiar_estado_lote(
-  uuid[], public.estado_reporte, text
+  uuid[], public.estado_reporte, text, text
 ) to service_role;
+
+-- 12) Roles de administración: admin y super ---------------------------------
+-- «super» puede agregar/quitar administradores y cambiar roles. Si todavía no
+-- hay ningún super, el administrador más antiguo pasa a serlo (así nadie queda
+-- sin gestión). El rol se lee de la base en cada petición.
+alter table public.administradores
+  add column if not exists rol text not null default 'admin';
+
+alter table public.administradores
+  drop constraint if exists administradores_rol_valido;
+alter table public.administradores
+  add constraint administradores_rol_valido check (rol in ('admin', 'super'));
+
+update public.administradores
+   set rol = 'super'
+ where user_id = (
+         select user_id
+           from public.administradores
+          order by creado_en, user_id
+          limit 1
+       )
+   and not exists (
+         select 1 from public.administradores where rol = 'super'
+       );
+
+-- Red de seguridad frente a condiciones de carrera: nunca puede quedar el
+-- sistema sin un super administrador.
+create or replace function public.proteger_ultimo_super()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.rol = 'super'
+     and (tg_op = 'DELETE' or new.rol is distinct from 'super')
+     and not exists (
+       select 1
+         from public.administradores
+        where rol = 'super'
+          and user_id <> old.user_id
+     )
+  then
+    raise exception 'Debe quedar al menos un super administrador.';
+  end if;
+
+  return case when tg_op = 'DELETE' then old else new end;
+end;
+$$;
+
+drop trigger if exists administradores_proteger_ultimo_super
+  on public.administradores;
+create trigger administradores_proteger_ultimo_super
+  before update of rol or delete on public.administradores
+  for each row execute function public.proteger_ultimo_super();
+
+comment on column public.administradores.rol is
+  'admin: gestiona reportes. super: además gestiona administradores.';
 
 notify pgrst, 'reload schema';

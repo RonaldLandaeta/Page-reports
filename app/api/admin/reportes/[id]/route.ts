@@ -30,7 +30,8 @@ export async function PATCH(
   { 
     p_id: id, 
     p_estado: estado, 
-    p_nota: nota || undefined 
+    p_nota: nota || undefined,
+    p_admin: admin.email,
   },
 );
 

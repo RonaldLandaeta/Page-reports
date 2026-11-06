@@ -174,6 +174,27 @@ desde la malla local):
 `tipo_error_detalle` es obligatorio y de máximo 100 caracteres (en los demás
 tipos se ignora).
 
+### Panel de administración (`/admin`)
+
+1. Supabase → Authentication → Users → crea el primer usuario (correo +
+   contraseña, marca **Auto Confirm User**) y autorízalo:
+   `insert into public.administradores (user_id) select id from auth.users where email = 'tu-admin@dominio';`
+   (la migración 0007 convierte en `super` al administrador más antiguo).
+2. La sesión es una cookie `httpOnly` firmada de **2 horas como máximo**
+   (`ADMIN_SESION_HORAS` solo puede acortarla), sin renovación. En cada
+   petición se lee de la base si el usuario sigue siendo administrador y con
+   qué rol: si lo quitas o lo degradas, rige al instante.
+3. Roles: `admin` gestiona reportes; `super` además agrega/quita
+   administradores y cambia roles (sección «Administradores», solo visible para
+   super). Un trigger impide dejar el sistema sin ningún super.
+4. Lotes: marca reportes y pásalos de estado juntos, o descárgalos (CSV para
+   Excel o JSON para app_ingresos), sea la selección o todo lo que cumpla el
+   filtro (hasta 5000). Al descargar, los «Pendiente de revisión» pasan a «En
+   revisión».
+5. Auditoría: cada intento de login queda en `public.admin_intentos` (correo,
+   IP hasheada, motivo) y cada cambio de estado guarda en
+   `reporte_eventos.admin_email` quién lo hizo.
+
 ### Exportación para app_ingresos (`datos.json`)
 
 En `/admin`, con el formato **JSON (app de ingreso)**, la descarga genera

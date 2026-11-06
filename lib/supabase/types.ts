@@ -77,14 +77,17 @@ export type Database = {
       administradores: {
         Row: {
           creado_en: string
+          rol: "admin" | "super"
           user_id: string
         }
         Insert: {
           creado_en?: string
+          rol?: "admin" | "super"
           user_id: string
         }
         Update: {
           creado_en?: string
+          rol?: "admin" | "super"
           user_id?: string
         }
         Relationships: []
@@ -142,6 +145,7 @@ export type Database = {
       }
       reporte_eventos: {
         Row: {
+          admin_email: string | null
           creado_en: string
           estado_anterior: Database["public"]["Enums"]["estado_reporte"] | null
           estado_nuevo: Database["public"]["Enums"]["estado_reporte"]
@@ -150,6 +154,7 @@ export type Database = {
           reporte_id: string
         }
         Insert: {
+          admin_email?: string | null
           creado_en?: string
           estado_anterior?:
             | Database["public"]["Enums"]["estado_reporte"]
@@ -160,6 +165,7 @@ export type Database = {
           reporte_id: string
         }
         Update: {
+          admin_email?: string | null
           creado_en?: string
           estado_anterior?:
             | Database["public"]["Enums"]["estado_reporte"]
@@ -237,6 +243,7 @@ export type Database = {
     Functions: {
       cambiar_estado_reporte: {
         Args: {
+          p_admin?: string
           p_estado: Database["public"]["Enums"]["estado_reporte"]
           p_id: string
           p_nota?: string
@@ -245,6 +252,7 @@ export type Database = {
       }
       cambiar_estado_lote: {
         Args: {
+          p_admin?: string
           p_estado: Database["public"]["Enums"]["estado_reporte"]
           p_ids: string[]
           p_nota?: string

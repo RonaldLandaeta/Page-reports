@@ -15,13 +15,21 @@ import {
 
 export const COOKIE_ADMIN = "admin_token";
 
-const HORAS_POR_DEFECTO = 8;
-const HORAS_MIN = 1;
-const HORAS_MAX = 72;
+/** Tope absoluto de la sesión: ninguna configuración puede superarlo. */
+const HORAS_MAX = 2;
+const HORAS_POR_DEFECTO = HORAS_MAX;
+const HORAS_MIN = 0.25;
+
+export type RolAdmin = "admin" | "super";
 
 export interface AdminActual {
   userId: string;
   email: string;
+  rol: RolAdmin;
+}
+
+export function esSuperAdmin(admin: Pick<AdminActual, "rol">): boolean {
+  return admin.rol === "super";
 }
 
 export type ResultadoAutenticacion =
@@ -38,8 +46,8 @@ interface CargaSesion {
 }
 
 /**
- * Duración EXACTA de la sesión (no se renueva sola). Configurable con
- * ADMIN_SESION_HORAS; por defecto 8 h.
+ * Duración EXACTA de la sesión (no se renueva sola): 2 h por defecto y como
+ * máximo. ADMIN_SESION_HORAS solo puede acortarla (mínimo 15 min).
  */
 export function duracionSesionSegundos(): number {
   const bruto = Number((process.env.ADMIN_SESION_HORAS ?? "").trim());
@@ -64,7 +72,10 @@ function firmar(datos: string): Buffer {
   return createHmac("sha256", clavePropia()).update(datos).digest();
 }
 
-function crearToken(admin: AdminActual, expiraEn: number): string {
+function crearToken(
+  admin: Pick<AdminActual, "userId" | "email">,
+  expiraEn: number,
+): string {
   const carga: CargaSesion = { u: admin.userId, e: admin.email, x: expiraEn };
   const cuerpo = Buffer.from(JSON.stringify(carga)).toString("base64url");
 
@@ -128,16 +139,17 @@ function leerCookie(request: Request, nombre: string): string | null {
   return null;
 }
 
-async function esAdministrador(userId: string): Promise<boolean> {
+/** Rol vigente en la base de datos, o null si ya no es administrador. */
+async function rolDeAdministrador(userId: string): Promise<RolAdmin | null> {
   const { data, error } = await obtenerSupabaseAdmin()
     .from("administradores")
-    .select("user_id")
+    .select("rol")
     .eq("user_id", userId)
     .maybeSingle();
 
   if (error) throw new Error("No se pudieron comprobar los permisos de administrador.");
 
-  return data !== null;
+  return data ? (data.rol === "super" ? "super" : "admin") : null;
 }
 
 // ── API pública ─────────────────────────────────────────────────────────────
@@ -166,20 +178,19 @@ export async function autenticarAdmin(
 
   if (error || !data.user) return { ok: false, motivo: "credenciales" };
 
-  if (!(await esAdministrador(data.user.id))) {
-    return { ok: false, motivo: "sin_permiso" };
-  }
+  const rol = await rolDeAdministrador(data.user.id);
+  if (!rol) return { ok: false, motivo: "sin_permiso" };
 
   return {
     ok: true,
-    admin: { userId: data.user.id, email: data.user.email ?? correo },
+    admin: { userId: data.user.id, email: data.user.email ?? correo, rol },
   };
 }
 
 /** Crea la cookie de sesión con la duración exacta configurada. */
 export function iniciarSesionAdmin(
   response: NextResponse,
-  admin: AdminActual,
+  admin: Pick<AdminActual, "userId" | "email">,
 ): void {
   const segundos = duracionSesionSegundos();
   const expiraEn = Math.floor(Date.now() / 1000) + segundos;
@@ -194,9 +205,9 @@ export function iniciarSesionAdmin(
 }
 
 /**
- * Valida la firma y la expiración y vuelve a comprobar en la base que el
- * usuario siga siendo administrador (si lo quitas, pierde el acceso al
- * instante aunque su cookie no haya vencido).
+ * Valida la firma y la expiración y vuelve a leer en la base que el usuario
+ * siga siendo administrador y con qué rol (si lo quitas o lo degradas, el
+ * cambio rige al instante aunque su cookie no haya vencido).
  */
 export async function obtenerAdminPorToken(
   token: string,
@@ -205,13 +216,12 @@ export async function obtenerAdminPorToken(
   if (!carga) return null;
 
   try {
-    if (!(await esAdministrador(carga.u))) return null;
+    const rol = await rolDeAdministrador(carga.u);
+    return rol ? { userId: carga.u, email: carga.e, rol } : null;
   } catch (error) {
     console.error("[admin/sesion]", error);
     return null;
   }
-
-  return { userId: carga.u, email: carga.e };
 }
 
 export async function obtenerAdmin(

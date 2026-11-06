@@ -1,7 +1,11 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { COOKIE_ADMIN, obtenerAdminPorToken } from "@/lib/admin/sesion";
+import {
+  COOKIE_ADMIN,
+  esSuperAdmin,
+  obtenerAdminPorToken,
+} from "@/lib/admin/sesion";
 import { AdminView } from "./AdminView";
 
 export const dynamic = "force-dynamic";
@@ -12,5 +16,5 @@ export default async function AdminPage() {
 
   if (!admin) redirect("/admin/login");
 
-  return <AdminView miUserId={admin.userId} />;
+  return <AdminView miUserId={admin.userId} esSuper={esSuperAdmin(admin)} />;
 }
