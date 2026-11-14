@@ -258,7 +258,7 @@ async function procesar(
 
         if (resultado.codigoDemo) {
           mensajes.push({
-            texto: `Entorno de desarrollo: usa el código ${resultado.codigoDemo}.`,
+            texto: `Código de prueba: ${resultado.codigoDemo}.`,
           });
         }
 
@@ -298,7 +298,7 @@ async function procesar(
 
           if (resultado.codigoDemo) {
             mensajes.push({
-              texto: `Entorno de desarrollo: usa el código ${resultado.codigoDemo}.`,
+              texto: `Código de prueba: ${resultado.codigoDemo}.`,
             });
           }
 

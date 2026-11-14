@@ -40,6 +40,23 @@ const MS_HORA = 60 * 60 * 1000;
 
 const secreto = secretoVerificacion;
 
+/**
+ * Código fijo de pruebas. Por defecto es `123456` para poder completar el
+ * flujo sin proveedor de correo (también en producción). Con
+ * `VERIFICACION_CODIGO_FIJO=off` se vuelve al código aleatorio + correo.
+ *
+ * Mientras esté activo: no se envía correo, no se aplican los límites de
+ * solicitudes y el código se devuelve en la respuesta para mostrarlo en
+ * pantalla.
+ */
+function codigoVerificacionFijo(): string | null {
+  const valor = (process.env.VERIFICACION_CODIGO_FIJO ?? "").trim();
+
+  if (/^(off|false|0|no)$/i.test(valor)) return null;
+
+  return valor || "123456";
+}
+
 function hashCodigo(correo: string, codigo: string): string {
   return createHmac("sha256", secreto())
     .update(`${correo}:${codigo}`)
@@ -146,10 +163,16 @@ export async function solicitarCodigo(
   const supabase = obtenerSupabaseAdmin();
 
   // Modo prueba: código fijo, sin envío de correo y sin límites de solicitudes.
-  // Se activa solo definiendo VERIFICACION_CODIGO_FIJO (nunca en producción).
-  const codigoFijo = CONFIG.codigoVerificacionFijo;
+  // Se desactiva solo con VERIFICACION_CODIGO_FIJO=off.
+  const codigoFijo = codigoVerificacionFijo();
 
   if (codigoFijo) {
+    if (process.env.NODE_ENV === "production") {
+      console.warn(
+        "[verificacion] ATENCIÓN: código de verificación fijo activo en producción. " +
+          "Define VERIFICACION_CODIGO_FIJO=off para usar el flujo real con correo.",
+      );
+    }
     const expiraEn = new Date(
       Date.now() + CONFIG.duracionCodigoVerificacionMinutos * 60 * 1000,
     ).toISOString();

@@ -13,14 +13,6 @@ export const CONFIG = {
   maxSolicitudesCodigoPorIpHora: 20,
   /** Intentos permitidos para acertar un mismo código. */
   maxIntentosCodigo: 5,
-  /**
-   * Código fijo para pruebas (p. ej. 123456). Si está definido, NO se envía
-   * correo, no se aplican los límites de solicitudes y el código se devuelve
-   * en la respuesta para mostrarlo en pantalla. En producción debe quedar
-   * vacío: es una puerta trasera de desarrollo.
-   */
-  codigoVerificacionFijo:
-    (process.env.VERIFICACION_CODIGO_FIJO ?? "").trim() || null,
   /** Consultas fallidas (ticket + cédula) permitidas por IP en la ventana. */
   maxConsultasFallidasPorIp: 10,
   /**
