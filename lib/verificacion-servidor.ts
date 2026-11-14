@@ -128,6 +128,8 @@ export function verificarTokenVerificacion(
 /**
  * Genera un código, aplica límites por correo e IP y lo envía.
  * En desarrollo, si Resend no está configurado, devuelve `codigoDemo`.
+ * Con `VERIFICACION_CODIGO_FIJO` definido, usa ese código, no envía correo y
+ * siempre devuelve `codigoDemo` para mostrarlo en pantalla.
  */
 export async function solicitarCodigo(
   correo: string,
@@ -142,6 +144,44 @@ export async function solicitarCodigo(
   }
 
   const supabase = obtenerSupabaseAdmin();
+
+  // Modo prueba: código fijo, sin envío de correo y sin límites de solicitudes.
+  // Se activa solo definiendo VERIFICACION_CODIGO_FIJO (nunca en producción).
+  const codigoFijo = CONFIG.codigoVerificacionFijo;
+
+  if (codigoFijo) {
+    const expiraEn = new Date(
+      Date.now() + CONFIG.duracionCodigoVerificacionMinutos * 60 * 1000,
+    ).toISOString();
+
+    const { error: errorFijo } = await supabase
+      .from("codigos_verificacion")
+      .insert({
+        correo,
+        codigo_hash: hashCodigo(correo, codigoFijo),
+        expira_en: expiraEn,
+        ip_hash: ipHash,
+      });
+
+    if (errorFijo) {
+      console.error(
+        "[verificacion] no se pudo guardar el código fijo.",
+        errorFijo,
+      );
+      throw new ErrorVerificacion(
+        "interno",
+        "No pudimos generar el código.",
+        500,
+      );
+    }
+
+    console.info(
+      `[verificacion:prueba] Código fijo para ${correo}: ${codigoFijo}`,
+    );
+
+    return { expiraEn, codigoDemo: codigoFijo };
+  }
+
   const desdeHora = new Date(Date.now() - MS_HORA).toISOString();
 
   const { count: porCorreo, error: errorConteo } = await supabase

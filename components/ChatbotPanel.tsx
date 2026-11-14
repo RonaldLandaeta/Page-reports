@@ -88,6 +88,8 @@ interface Respuesta {
   opciones?: Materia[];
   /** Descarta los datos acumulados (reporte terminado o bloqueado). */
   reiniciar?: boolean;
+  /** Código devuelto por la API en modo prueba, para mostrarlo en pantalla. */
+  codigoDemo?: string;
 }
 
 interface ContextoProceso {
@@ -260,7 +262,10 @@ async function procesar(
           });
         }
 
-        return avanzar("verificacion", mensajes);
+        return {
+          ...avanzar("verificacion", mensajes),
+          codigoDemo: resultado.codigoDemo,
+        };
       } catch (error) {
         return rechazo(
           "correo",
@@ -300,6 +305,7 @@ async function procesar(
           return {
             mensajes: [...mensajes, { texto: PREGUNTAS.verificacion }],
             paso: "verificacion",
+            codigoDemo: resultado.codigoDemo,
           };
         } catch (error) {
           return rechazo(
@@ -538,6 +544,8 @@ interface CompositorProps {
   indice: MateriaIndexada[];
   /** Opciones pendientes de desambiguar (NRC repetido). */
   opciones: Materia[];
+  /** Código de prueba devuelto por la API (modo desarrollo). */
+  codigoDemo: string | null;
   entradaRef: RefObject<HTMLTextAreaElement | null>;
   onEnviar: (texto: string, vista?: string) => void;
 }
@@ -552,6 +560,7 @@ function Compositor({
   deshabilitado,
   indice,
   opciones,
+  codigoDemo,
   entradaRef,
   onEnviar,
 }: CompositorProps) {
@@ -614,6 +623,16 @@ function Compositor({
 
       {paso === "verificacion" && (
         <div className="flex flex-wrap gap-2 px-4 pt-3 sm:px-6">
+          {codigoDemo && (
+            <button
+              type="button"
+              disabled={bloqueado}
+              onClick={() => enviar(codigoDemo, codigoDemo)}
+              className={CLASE_CHIP}
+            >
+              Usar código {codigoDemo}
+            </button>
+          )}
           <button
             type="button"
             disabled={bloqueado}
@@ -729,6 +748,7 @@ export function ChatbotPanel({
   const [paso, setPaso] = useState<Paso>("ci");
   const [ocupado, setOcupado] = useState(false);
   const [opciones, setOpciones] = useState<Materia[]>([]);
+  const [codigoDemo, setCodigoDemo] = useState<string | null>(null);
 
   // Estado que no se pinta vive en refs: evita renders y cierres obsoletos.
   const datosRef = useRef<Datos>({});
@@ -798,6 +818,7 @@ export function ChatbotPanel({
           pasoRef.current = respuesta.paso;
           setPaso(respuesta.paso);
           setOpciones(respuesta.opciones ?? []);
+          setCodigoDemo(respuesta.codigoDemo ?? null);
           agregar(
             respuesta.mensajes.map((mensaje) => ({
               autor: "bot" as const,
@@ -826,6 +847,7 @@ export function ChatbotPanel({
     interactuado.current = false;
     setPaso("ci");
     setOpciones([]);
+    setCodigoDemo(null);
     setMensajes(MENSAJES_INICIALES);
   }, []);
 
@@ -894,6 +916,7 @@ export function ChatbotPanel({
         deshabilitado={catalogoVacio}
         indice={indice}
         opciones={opciones}
+        codigoDemo={codigoDemo}
         entradaRef={entradaRef}
         onEnviar={enviar}
       />
