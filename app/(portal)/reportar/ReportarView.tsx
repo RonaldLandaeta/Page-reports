@@ -29,7 +29,7 @@ export function ReportarView({
         <div>
           <span className="inline-flex items-center gap-2 rounded-full border border-indigo-100 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-500/15 px-3 py-1 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
             <ClockIcon className="size-3.5" />
-            Ciclo académico 2026-2
+            Ciclo académico 2027
           </span>
           <h1 className="mt-3 max-w-2xl text-balance text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
             Reporta un problema en tu horario
