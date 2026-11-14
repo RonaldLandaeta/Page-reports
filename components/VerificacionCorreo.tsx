@@ -184,7 +184,10 @@ export function VerificacionCorreo({
             No se envió un correo. Usa este código:
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <p className="font-mono text-lg font-bold tracking-[0.3em] text-amber-900 dark:text-amber-200">
+            <p
+              role="status"
+              className="font-mono text-lg font-bold tracking-[0.3em] text-amber-900 dark:text-amber-200"
+            >
               {codigoDemo}
             </p>
             <button
@@ -194,7 +197,7 @@ export function VerificacionCorreo({
                 void confirmar(codigoDemo);
               }}
               disabled={fase === "validando"}
-              className="rounded-lg border border-amber-300 dark:border-amber-500/40 bg-white/70 dark:bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:text-amber-200 transition-colors hover:bg-white dark:hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg border border-amber-300 dark:border-amber-500/40 bg-white/70 dark:bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:text-amber-200 transition-colors hover:bg-white dark:hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Usar este código
             </button>

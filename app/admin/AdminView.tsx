@@ -64,7 +64,7 @@ function CheckboxGrupo({
       ref={(elemento) => {
         if (elemento) elemento.indeterminate = parcial;
       }}
-      className="mt-1 h-4 w-4 shrink-0"
+      className="mt-1 h-5 w-5 shrink-0"
     />
   );
 }
@@ -380,7 +380,7 @@ export function AdminView({
         className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-sm">
         <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
           <input type="checkbox" checked={todosMarcados} onChange={alternarTodos}
-            disabled={reportes.length === 0} className="h-4 w-4" />
+            disabled={reportes.length === 0} className="h-5 w-5" />
           Seleccionar visibles ({seleccion.size})
         </label>
 
@@ -437,7 +437,7 @@ export function AdminView({
           <button
             type="button"
             onClick={alternarTodosContraidos}
-            className="rounded text-xs font-semibold text-indigo-600 transition-colors hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
+            className="inline-flex min-h-9 items-center rounded px-1 text-xs font-semibold text-indigo-600 transition-colors hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
           >
             {todosContraidos ? "Expandir todas las cédulas" : "Contraer todas las cédulas"}
           </button>
@@ -488,7 +488,7 @@ export function AdminView({
                     onClick={() => alternarContraido(grupo.ci)}
                     aria-expanded={!contraido}
                     aria-controls={`tickets-${grupo.ci}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
                   >
                     {contraido ? "Mostrar" : "Ocultar"}
                     <ChevronDownIcon
@@ -508,7 +508,7 @@ export function AdminView({
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="flex min-w-0 gap-3">
                         <input type="checkbox" checked={seleccion.has(r.id)} onChange={() => alternar(r.id)}
-                          aria-label={`Seleccionar ${r.ticket}`} className="mt-1 h-4 w-4 shrink-0" />
+                          aria-label={`Seleccionar ${r.ticket}`} className="mt-1 h-5 w-5 shrink-0" />
                         <div className="min-w-0">
                           <p className="font-mono text-sm font-bold text-indigo-700 dark:text-indigo-300">{r.ticket}</p>
                           <p className="mt-0.5 text-sm font-semibold text-slate-800 dark:text-slate-200">
@@ -533,10 +533,10 @@ export function AdminView({
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <input type="text" maxLength={500} placeholder="Nota (opcional)" aria-label={`Nota para ${r.ticket}`}
                         value={notas[r.id] ?? ""} onChange={(e) => setNotas((p) => ({ ...p, [r.id]: e.target.value }))}
-                        className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500" />
+                        className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-400 sm:text-sm" />
                       {ESTADOS_REPORTE.filter((e) => e.value !== r.estado).map((e) => (
                         <button key={e.value} type="button" disabled={guardando === r.id} onClick={() => void cambiar(r, e.value)}
-                          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-900 disabled:bg-indigo-400">
+                          className="min-h-9 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-900 disabled:bg-indigo-400">
                           Pasar a «{e.label}»
                         </button>
                       ))}
@@ -740,11 +740,11 @@ function PanelAdministradores({
                   <span className="flex flex-wrap gap-2">
                     <button type="button" disabled={enviando}
                       onClick={() => void cambiarRol(fila, fila.rol === "super" ? "admin" : "super")}
-                      className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-300 dark:hover:bg-slate-800 disabled:opacity-50">
+                      className="min-h-9 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-300 dark:hover:bg-slate-800 disabled:opacity-50">
                       {fila.rol === "super" ? "Quitar super" : "Hacer super"}
                     </button>
                     <button type="button" disabled={enviando} onClick={() => void quitar(fila)}
-                      className="rounded-lg border border-rose-200 dark:border-rose-500/30 px-3 py-1.5 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 dark:text-rose-300 dark:hover:bg-rose-500/15 disabled:opacity-50">
+                      className="min-h-9 rounded-lg border border-rose-200 dark:border-rose-500/30 px-3 py-1.5 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 dark:text-rose-300 dark:hover:bg-rose-500/15 disabled:opacity-50">
                       Quitar acceso
                     </button>
                   </span>

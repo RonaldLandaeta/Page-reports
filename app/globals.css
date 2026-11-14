@@ -20,6 +20,28 @@ body {
 }
 
 /*
+ * Red de seguridad de foco: cualquier control sin anillo propio (checkbox,
+ * radios, enlaces sueltos) conserva un indicador visible al navegar con teclado.
+ * Va en `base` para que las utilidades `outline-none` sigan ganando cuando un
+ * componente ya dibuja su propio anillo.
+ */
+@layer base {
+  :focus-visible {
+    outline: 2px solid #4f46e5;
+    outline-offset: 2px;
+  }
+
+  .dark :focus-visible {
+    outline-color: #818cf8;
+  }
+}
+
+/* Al enfocar un campo desde el resumen de errores, el header fijo no lo tapa. */
+:where([id]) {
+  scroll-margin-top: 5.5rem;
+}
+
+/*
  * Tailwind v4 deja los botones con el cursor por defecto. Los elementos
  * interactivos deben invitar al clic (sin afectar a los deshabilitados).
  */
@@ -83,5 +105,14 @@ input[type="radio"] {
   .animate-fade-in,
   .animate-modal-in {
     animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

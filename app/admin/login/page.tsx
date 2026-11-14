@@ -5,13 +5,14 @@ import { useState, type FormEvent } from "react";
 
 import { ErrorApi, postJson } from "@/lib/api-cliente";
 
-import { ClockIcon } from "@/components/icons";
+import { ClockIcon, EyeIcon, EyeOffIcon } from "@/components/icons";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const [correo, setCorreo] = useState("");
   const [clave, setClave] = useState("");
+  const [verClave, setVerClave] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -58,8 +59,19 @@ export default function AdminLoginPage() {
           onChange={(e) => setCorreo(e.target.value)} className={`${control} mt-1.5`} />
 
         <label htmlFor="clave" className="mt-4 block text-sm font-medium text-slate-700 dark:text-slate-300">Contraseña</label>
-        <input id="clave" type="password" autoComplete="current-password" required value={clave}
-          onChange={(e) => setClave(e.target.value)} className={`${control} mt-1.5`} />
+        <div className="relative mt-1.5">
+          <input id="clave" type={verClave ? "text" : "password"} autoComplete="current-password" required value={clave}
+            onChange={(e) => setClave(e.target.value)} className={`${control} pr-11`} />
+          <button
+            type="button"
+            onClick={() => setVerClave((valor) => !valor)}
+            aria-label={verClave ? "Ocultar contraseña" : "Mostrar contraseña"}
+            aria-pressed={verClave}
+            className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-500 transition-colors hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:text-slate-200"
+          >
+            {verClave ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+          </button>
+        </div>
 
         <button type="submit" disabled={enviando}
           className="mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-indigo-400">

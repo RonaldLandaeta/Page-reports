@@ -42,7 +42,7 @@ export function ReportarView({
 
         <Link
           href="/consultar"
-          className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-500/15 sm:self-auto"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 self-start rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-500/15 sm:self-auto"
         >
           Consultar un ticket
           <ArrowRightIcon className="size-4" />

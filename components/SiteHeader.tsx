@@ -51,7 +51,7 @@ export function SiteHeader() {
                   key={enlace.href}
                   href={enlace.href}
                   aria-current={activo ? "page" : undefined}
-                  className={`flex min-h-9 items-center rounded-lg px-2 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:px-3.5 sm:text-sm ${
+                  className={`flex min-h-10 items-center rounded-lg px-2 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 sm:px-3.5 sm:text-sm ${
                     activo
                       ? "bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
