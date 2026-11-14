@@ -12,6 +12,7 @@ import { postJson } from "@/lib/api-cliente";
 import type { EstadoReporte, Reporte } from "@/lib/types";
 
 import { ChevronDownIcon } from "@/components/icons";
+import { LogoMarca } from "@/components/LogoMarca";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 const formatoFecha = new Intl.DateTimeFormat("es-VE", {
@@ -349,11 +350,14 @@ export function AdminView({
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Reportes de horarios</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Revisa, actualiza y descarga los reportes recibidos.
-          </p>
+        <div className="flex items-center gap-3">
+          <LogoMarca className="h-10 w-auto" />
+          <div>
+            <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Reportes de horarios</h1>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Revisa, actualiza y descarga los reportes recibidos.
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />

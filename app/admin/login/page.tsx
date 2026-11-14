@@ -5,7 +5,8 @@ import { useState, type FormEvent } from "react";
 
 import { ErrorApi, postJson } from "@/lib/api-cliente";
 
-import { ClockIcon, EyeIcon, EyeOffIcon } from "@/components/icons";
+import { EyeIcon, EyeOffIcon } from "@/components/icons";
+import { LogoMarca } from "@/components/LogoMarca";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function AdminLoginPage() {
@@ -42,9 +43,7 @@ export default function AdminLoginPage() {
         <ThemeToggle />
       </div>
       <form onSubmit={entrar} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
-        <span className="flex size-11 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
-          <ClockIcon className="size-5" />
-        </span>
+        <LogoMarca className="h-12 w-auto" />
         <h1 className="mt-4 text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">Acceso de administración</h1>
         <p className="mt-1 text-pretty text-sm text-slate-500 dark:text-slate-400">Solo personal autorizado.</p>
 
