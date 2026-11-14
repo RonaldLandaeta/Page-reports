@@ -65,7 +65,30 @@ const FORMULARIO_INICIAL: FormState = {
 };
 
 const ESTILO_CONTROL =
-  "w-full rounded-xl border bg-white dark:bg-slate-900 px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100 transition-colors placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:text-slate-500";
+  "w-full rounded-xl border bg-white dark:bg-slate-900 px-3.5 py-2.5 text-base text-slate-900 dark:text-slate-100 transition-colors placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:text-slate-500 sm:text-sm";
+
+/** Etiqueta legible de cada campo para el resumen de errores. */
+const ETIQUETAS_CAMPO: Record<CampoFormulario, string> = {
+  ci: "Cédula",
+  nombre: "Nombre",
+  correo: "Correo",
+  materia_codigo: "Materia",
+  tipo_error: "Tipo de error",
+  tipo_error_detalle: "Especifica el error",
+  motivo: "Motivo",
+};
+
+/** Marca visual y accesible de campo obligatorio. */
+function Requerido() {
+  return (
+    <>
+      <span aria-hidden="true" className="text-rose-500 dark:text-rose-400">
+        *
+      </span>
+      <span className="sr-only"> (obligatorio)</span>
+    </>
+  );
+}
 
 /** Lee la expiración del token firmado (no valida la firma en el cliente). */
 function verificacionVigente(verificacion: VerificacionAprobada): boolean {
@@ -124,6 +147,7 @@ export function FormularioTradicional({
     useState<VerificacionAprobada | null>(null);
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [mostrarResumen, setMostrarResumen] = useState(false);
   const [ultimoEnvio, setUltimoEnvio] = useState<DatosParaOtroReporte | null>(
     null,
   );
@@ -227,6 +251,7 @@ export function FormularioTradicional({
   function limpiarFormulario() {
     setFormulario(FORMULARIO_INICIAL);
     setErrores({});
+    setMostrarResumen(false);
     setVerificacion(null);
     setErrorEnvio(null);
   }
@@ -240,11 +265,14 @@ export function FormularioTradicional({
 
     if (Object.keys(nuevosErrores).length > 0) {
       setErrores(nuevosErrores);
+      setMostrarResumen(true);
 
       const primerCampo = Object.keys(nuevosErrores)[0];
       document.getElementById(primerCampo)?.focus();
       return;
     }
+
+    setMostrarResumen(false);
 
     if (!esTipoError(formulario.tipo_error) || !verificacion) return;
 
@@ -283,6 +311,7 @@ export function FormularioTradicional({
       });
       setFormulario(FORMULARIO_INICIAL);
       setErrores({});
+      setMostrarResumen(false);
       setVerificacion(null);
       setErrorEnvio(null);
     } catch {
@@ -320,6 +349,7 @@ export function FormularioTradicional({
       );
       setErrores({});
       setErrorEnvio(null);
+      setMostrarResumen(false);
     }
 
     cerrarModalExito();
@@ -344,9 +374,13 @@ export function FormularioTradicional({
               >
                 Formulario de reporte de horarios
               </h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
+              <p className="mt-1 text-pretty text-sm leading-6 text-slate-500 dark:text-slate-400">
                 Completa los datos para que podamos identificar y corregir el
                 error en tu horario.
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Los campos con <span aria-hidden="true" className="font-semibold text-rose-500 dark:text-rose-400">*</span>
+                <span className="sr-only">asterisco</span> son obligatorios.
               </p>
             </div>
             <span className="hidden shrink-0 rounded-full bg-indigo-50 dark:bg-indigo-500/15 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-100 dark:ring-indigo-500/30 sm:inline-flex">
@@ -383,13 +417,42 @@ export function FormularioTradicional({
             </div>
           )}
 
+          {mostrarResumen && Object.keys(errores).length > 0 && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-xl border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-4 py-3 text-sm leading-6 text-rose-700 dark:text-rose-300"
+            >
+              <AlertIcon className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Revisa estos campos:</p>
+                <ul className="mt-1 space-y-0.5">
+                  {Object.entries(errores).map(([campo, mensaje]) => (
+                    <li key={campo}>
+                      <a
+                        href={`#${campo}`}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          document.getElementById(campo)?.focus();
+                        }}
+                        className="rounded underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/40"
+                      >
+                        {ETIQUETAS_CAMPO[campo as CampoFormulario] ?? campo}:{" "}
+                        {mensaje}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-5 sm:grid-cols-2">
             <div>
               <label
                 htmlFor="ci"
                 className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
               >
-                Cédula <span className="text-rose-500 dark:text-rose-400">*</span>
+                Cédula <Requerido />
               </label>
               <input
                 id="ci"
@@ -419,7 +482,7 @@ export function FormularioTradicional({
                 htmlFor="nombre"
                 className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
               >
-                Nombre <span className="text-rose-500 dark:text-rose-400">*</span>
+                Nombre <Requerido />
               </label>
               <input
                 id="nombre"
@@ -443,13 +506,15 @@ export function FormularioTradicional({
               htmlFor="correo"
               className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
             >
-              Correo <span className="text-rose-500 dark:text-rose-400">*</span>
+              Correo <Requerido />
             </label>
             <input
               id="correo"
               name="correo"
               type="email"
               autoComplete="email"
+              autoCapitalize="none"
+              spellCheck={false}
               placeholder="nombre@est.ucab.edu.ve"
               value={formulario.correo}
               onChange={(event) => actualizarCorreo(event.target.value)}
@@ -460,7 +525,7 @@ export function FormularioTradicional({
             />
             <ErrorCampo id="correo-error" mensaje={errores.correo} />
             {esCorreoValido(formulario.correo) && !esCedulaValida(formulario.ci) && (
-              <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+              <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                 Escribe primero tu cédula para poder verificar el correo.
               </p>
             )}
@@ -488,7 +553,7 @@ export function FormularioTradicional({
                 htmlFor="materia_codigo"
                 className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
               >
-                Materia <span className="text-rose-500 dark:text-rose-400">*</span>
+                Materia <Requerido />
               </label>
               <select
                 id="materia_codigo"
@@ -527,7 +592,7 @@ export function FormularioTradicional({
                 htmlFor="tipo_error"
                 className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
               >
-                Tipo de error <span className="text-rose-500 dark:text-rose-400">*</span>
+                Tipo de error <Requerido />
               </label>
               <select
                 id="tipo_error"
@@ -570,7 +635,7 @@ export function FormularioTradicional({
                   {materiaSeleccionada.horario || "No registrado"}
                 </span>
               </p>
-              <p className="font-mono text-[11px] text-indigo-700/80 dark:text-indigo-300/80">
+              <p className="font-mono text-xs text-indigo-700/80 dark:text-indigo-300/80">
                 {materiaSeleccionada.codigo}
               </p>
             </div>
@@ -583,9 +648,9 @@ export function FormularioTradicional({
                   htmlFor="tipo_error_detalle"
                   className="block text-sm font-medium text-slate-700 dark:text-slate-300"
                 >
-                  Especifica el error <span className="text-rose-500 dark:text-rose-400">*</span>
+                  Especifica el error <Requerido />
                 </label>
-                <span className="text-[11px] tabular-nums text-slate-400 dark:text-slate-400">
+                <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
                   {formulario.tipo_error_detalle.length}/{DETALLE_ERROR_MAX}
                 </span>
               </div>
@@ -622,9 +687,9 @@ export function FormularioTradicional({
                 htmlFor="motivo"
                 className="block text-sm font-medium text-slate-700 dark:text-slate-300"
               >
-                Motivo <span className="text-rose-500 dark:text-rose-400">*</span>
+                Motivo <Requerido />
               </label>
-              <span className="text-[11px] tabular-nums text-slate-400 dark:text-slate-400">
+              <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
                 {formulario.motivo.length}/{MOTIVO_MAX}
               </span>
             </div>
@@ -647,10 +712,10 @@ export function FormularioTradicional({
           <div className="flex flex-col gap-4 border-t border-slate-100 dark:border-slate-800 pt-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="flex items-start gap-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
-                <ShieldIcon className="mt-0.5 size-4 shrink-0 text-slate-400 dark:text-slate-400" />
+                <ShieldIcon className="mt-0.5 size-4 shrink-0 text-slate-500 dark:text-slate-400" />
                 Tus datos se usan únicamente para gestionar este reporte.
               </p>
-              <p className="mt-1 text-[11px] leading-5 text-slate-400 dark:text-slate-400">
+              <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
                 Máximo {CONFIG.maxReportesPorDia} reportes por día · Sin
                 duplicados en {CONFIG.ventanaDuplicadosHoras} h.
               </p>
@@ -661,14 +726,14 @@ export function FormularioTradicional({
                 type="button"
                 onClick={limpiarFormulario}
                 disabled={enviando}
-                className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-400 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-400 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-500/15 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Limpiar
               </button>
               <button
                 type="submit"
                 disabled={enviando}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-indigo-400"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-indigo-400"
               >
                 {enviando ? (
                   <>

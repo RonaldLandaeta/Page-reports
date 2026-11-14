@@ -132,10 +132,10 @@ export function ConsultarView() {
           <SearchIcon className="size-3.5" />
           Consulta protegida
         </span>
-        <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
+        <h1 className="mt-3 text-balance text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
           Consulta el estado de tu reporte
         </h1>
-        <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600 dark:text-slate-400">
+        <p className="mx-auto mt-2 max-w-xl text-pretty text-sm leading-6 text-slate-600 dark:text-slate-400">
           Ingresa el código de ticket y la cédula con la que registraste el
           problema. Por seguridad, ambos datos deben coincidir.
         </p>
@@ -170,6 +170,8 @@ export function ConsultarView() {
                 name="ticket"
                 type="text"
                 autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
                 maxLength={TICKET_MAX_LONGITUD}
                 placeholder="Ej. TK-8392012"
                 value={ticket}
@@ -186,7 +188,7 @@ export function ConsultarView() {
                 required
                 aria-invalid={Boolean(errores.ticket)}
                 aria-describedby={errores.ticket ? "ticket-error" : undefined}
-                className={`w-full rounded-xl border bg-white dark:bg-slate-900 px-3.5 py-2.5 font-mono text-sm tracking-wider text-slate-900 dark:text-slate-100 transition-colors placeholder:font-sans placeholder:tracking-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-4 ${
+                className={`w-full rounded-xl border bg-white dark:bg-slate-900 px-3.5 py-2.5 font-mono text-base tracking-wider text-slate-900 dark:text-slate-100 transition-colors placeholder:font-sans placeholder:tracking-normal placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:outline-none focus:ring-4 sm:text-sm ${
                   errores.ticket
                     ? "border-rose-400 dark:border-rose-500/60 focus:border-rose-500 focus:ring-rose-500/10"
                     : "border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 focus:border-indigo-500 focus:ring-indigo-500/10"
@@ -230,7 +232,7 @@ export function ConsultarView() {
                 required
                 aria-invalid={Boolean(errores.ci)}
                 aria-describedby={errores.ci ? "consulta-ci-error" : undefined}
-                className={`w-full rounded-xl border bg-white dark:bg-slate-900 px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100 transition-colors placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-4 ${
+                className={`w-full rounded-xl border bg-white dark:bg-slate-900 px-3.5 py-2.5 text-base text-slate-900 dark:text-slate-100 transition-colors placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:outline-none focus:ring-4 sm:text-sm ${
                   errores.ci
                     ? "border-rose-400 dark:border-rose-500/60 focus:border-rose-500 focus:ring-rose-500/10"
                     : "border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 focus:border-indigo-500 focus:ring-indigo-500/10"
@@ -251,13 +253,13 @@ export function ConsultarView() {
 
           <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 dark:border-slate-800 pt-5 sm:flex-row sm:items-center sm:justify-between">
             <p className="flex items-start gap-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
-              <ShieldIcon className="mt-0.5 size-4 shrink-0 text-slate-400 dark:text-slate-400" />
+              <ShieldIcon className="mt-0.5 size-4 shrink-0 text-slate-500 dark:text-slate-400" />
               No mostramos datos sin la cédula registrada.
             </p>
             <button
               type="submit"
               disabled={consultando}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-indigo-400"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-indigo-400"
             >
               {consultando ? (
                 <>
@@ -297,7 +299,7 @@ export function ConsultarView() {
                   <DocumentIcon className="size-5" />
                 </span>
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Ticket
                   </p>
                   <h2
@@ -347,7 +349,7 @@ export function ConsultarView() {
 
             <div className="border-t border-slate-100 dark:border-slate-800 px-5 py-4">
               <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Motivo</p>
-              <p className="mt-1 text-sm leading-6 text-slate-700 dark:text-slate-300">
+              <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700 dark:text-slate-300">
                 {reporte.motivo}
               </p>
             </div>
@@ -390,13 +392,13 @@ export function ConsultarView() {
             Estados del reporte
           </h2>
           <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-            Pendiente de revisión → En revisión → Resuelto. El panel
-            administrativo se integrará en una siguiente etapa.
+            Pendiente de revisión → En revisión → Resuelto. Puedes volver a
+            consultar este ticket cuando quieras.
           </p>
         </div>
       </div>
 
-      <p className="mt-6 text-center text-[11px] leading-5 text-slate-400 dark:text-slate-400">
+      <p className="mt-6 text-center text-xs leading-5 text-slate-500 dark:text-slate-400">
         La consulta se valida en el servidor: el ticket y la cédula deben
         coincidir.
       </p>

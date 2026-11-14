@@ -33,7 +33,7 @@ export function ResumenReportes() {
             Reportes creados en esta sesión.
           </p>
         </div>
-        <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
           Sesión
         </span>
       </div>
@@ -55,7 +55,7 @@ export function ResumenReportes() {
         </div>
       ) : total === 0 ? (
         <div className="mt-5 flex flex-col items-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800 px-4 py-7 text-center">
-          <span className="flex size-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-400">
+          <span className="flex size-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
             <InboxIcon className="size-5" />
           </span>
           <p className="mt-3 text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -107,11 +107,11 @@ export function ResumenReportes() {
                     <p className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
                       {reporte.materiaNombre}
                     </p>
-                    <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
+                    <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
                       {reporte.ticket} · {getTipoErrorLabel(reporte.tipo_error)}
                     </p>
                   </div>
-                  <span className="flex shrink-0 items-center gap-1 text-[11px] text-slate-400 dark:text-slate-400">
+                  <span className="flex shrink-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                     <ClockIcon className="size-3" />
                     {formatoHora.format(new Date(reporte.creadoEn))}
                   </span>
@@ -123,12 +123,12 @@ export function ResumenReportes() {
       )}
 
       <div className="mt-5 border-t border-slate-100 dark:border-slate-800 pt-4">
-        <p className="text-[11px] leading-5 text-slate-400 dark:text-slate-400">
+        <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
           Máximo {CONFIG.maxReportesPorDia} reportes por día · Sin duplicados
           en {CONFIG.ventanaDuplicadosHoras} h.
         </p>
-        <p className="mt-1 text-[11px] leading-5 text-slate-400 dark:text-slate-400">
-          Los reportes se guardan en Supabase y se validan en el servidor.
+        <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+          Los reportes se validan en el servidor antes de guardarse.
         </p>
       </div>
     </aside>

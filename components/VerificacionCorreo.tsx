@@ -68,10 +68,11 @@ export function VerificacionCorreo({
         codigoDemo?: string;
       }>("/api/verificacion/solicitar", { correo: normalizado });
 
-      setCodigo("");
+      setCodigo(resultado.codigoDemo ?? "");
       setCodigoDemo(resultado.codigoDemo ?? null);
       setFase("enviado");
-      setCooldown(CONFIG.segundosEntreSolicitudes);
+      // En modo de código fijo no hay límite en el servidor: no bloqueamos el reenvío.
+      setCooldown(resultado.codigoDemo ? 0 : CONFIG.segundosEntreSolicitudes);
       onVerifiedChange(null);
     } catch (fallo) {
       setFase("inicial");
@@ -83,8 +84,8 @@ export function VerificacionCorreo({
     }
   }
 
-  async function confirmar() {
-    if (!/^\d{6}$/.test(codigo)) {
+  async function confirmar(valor: string = codigo) {
+    if (!/^\d{6}$/.test(valor)) {
       setError("Escribe los 6 dígitos del código.");
       return;
     }
@@ -95,7 +96,7 @@ export function VerificacionCorreo({
     try {
       const resultado = await postJson<{ token: string }>(
         "/api/verificacion/validar",
-        { correo: normalizado, codigo, ci },
+        { correo: normalizado, codigo: valor, ci },
       );
 
       setFase("verificado");
@@ -122,7 +123,7 @@ export function VerificacionCorreo({
           <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
             Correo verificado
           </p>
-          <p className="mt-0.5 text-[11px] text-emerald-700 dark:text-emerald-300">{normalizado}</p>
+          <p className="mt-0.5 text-xs text-emerald-700 dark:text-emerald-300">{normalizado}</p>
         </div>
       </div>
     );
@@ -136,7 +137,7 @@ export function VerificacionCorreo({
             type="button"
             onClick={solicitar}
             disabled={fase === "enviando"}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {fase === "enviando" ? (
               <>
@@ -150,13 +151,13 @@ export function VerificacionCorreo({
               </>
             )}
           </button>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Enviaremos un código de 6 dígitos.
           </p>
         </div>
 
         {error && (
-          <p role="alert" className="mt-2 text-[11px] font-medium text-rose-600 dark:text-rose-400">
+          <p role="alert" className="mt-2 text-xs font-medium text-rose-600 dark:text-rose-400">
             {error}
           </p>
         )}
@@ -167,7 +168,7 @@ export function VerificacionCorreo({
   return (
     <div className="mt-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3">
       <p className="flex items-start gap-1.5 text-xs leading-5 text-slate-600 dark:text-slate-400">
-        <MailIcon className="mt-0.5 size-3.5 shrink-0 text-slate-400 dark:text-slate-400" />
+        <MailIcon className="mt-0.5 size-3.5 shrink-0 text-slate-500 dark:text-slate-400" />
         <span>
           Enviamos un código de 6 dígitos a{" "}
           <span className="font-semibold text-slate-800 dark:text-slate-200">{normalizado}</span>.
@@ -176,15 +177,28 @@ export function VerificacionCorreo({
 
       {codigoDemo && (
         <div className="mt-2 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3 py-2.5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
-            Modo desarrollo
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+            Código de prueba
           </p>
           <p className="mt-1 text-xs leading-5 text-amber-800 dark:text-amber-300">
-            No se envió un correo real. Usa este código:
+            No se envió un correo. Usa este código:
           </p>
-          <p className="mt-1 font-mono text-lg font-bold tracking-[0.3em] text-amber-900 dark:text-amber-200">
-            {codigoDemo}
-          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <p className="font-mono text-lg font-bold tracking-[0.3em] text-amber-900 dark:text-amber-200">
+              {codigoDemo}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setCodigo(codigoDemo);
+                void confirmar(codigoDemo);
+              }}
+              disabled={fase === "validando"}
+              className="rounded-lg border border-amber-300 dark:border-amber-500/40 bg-white/70 dark:bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:text-amber-200 transition-colors hover:bg-white dark:hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Usar este código
+            </button>
+          </div>
         </div>
       )}
 
@@ -210,13 +224,13 @@ export function VerificacionCorreo({
             }
           }}
           disabled={fase === "validando"}
-          className="min-w-0 flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm tracking-widest text-slate-900 dark:text-slate-100 placeholder:tracking-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 disabled:bg-slate-50 dark:disabled:bg-slate-800"
+          className="min-w-0 flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-base tracking-widest text-slate-900 dark:text-slate-100 placeholder:tracking-normal placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 disabled:bg-slate-50 dark:disabled:bg-slate-800 sm:text-sm"
         />
         <button
           type="button"
-          onClick={confirmar}
+          onClick={() => void confirmar()}
           disabled={fase === "validando"}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 disabled:cursor-not-allowed disabled:bg-indigo-400"
+          className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 disabled:cursor-not-allowed disabled:bg-indigo-400"
         >
           {fase === "validando" ? (
             <>
@@ -233,21 +247,21 @@ export function VerificacionCorreo({
         <p
           id="codigo-verificacion-error"
           role="alert"
-          className="mt-2 text-[11px] font-medium text-rose-600 dark:text-rose-400"
+          className="mt-2 text-xs font-medium text-rose-600 dark:text-rose-400"
         >
           {error}
         </p>
       )}
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           Válido por {CONFIG.duracionCodigoVerificacionMinutos} minutos.
         </p>
         <button
           type="button"
-          onClick={solicitar}
+          onClick={() => void solicitar()}
           disabled={cooldown > 0 || fase === "validando"}
-          className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
+          className="rounded text-xs font-semibold text-indigo-600 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-indigo-400 disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline dark:disabled:text-slate-500"
         >
           {cooldown > 0 ? `Reenviar en ${cooldown}s` : "Reenviar código"}
         </button>

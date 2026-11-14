@@ -99,7 +99,7 @@ export function ConsolaJson() {
             onClick={copiar}
             disabled={!hidratado || reportes.length === 0}
             aria-label="Copiar JSON"
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[11px] text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex min-h-8 items-center gap-1 rounded-md px-2 py-1 font-mono text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {copiado ? (
               <CheckIcon className="size-3.5 text-emerald-400" />
@@ -113,7 +113,7 @@ export function ConsolaJson() {
             onClick={() => setAbierta((valor) => !valor)}
             aria-expanded={abierta}
             aria-controls="cuerpo-consola"
-            className="rounded-md px-2 py-1 font-mono text-[11px] text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 lg:hidden"
+            className="min-h-8 rounded-md px-2 py-1 font-mono text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 lg:hidden"
           >
             {abierta ? "ocultar" : "mostrar"}
           </button>
@@ -133,7 +133,7 @@ export function ConsolaJson() {
           <span className="select-none text-slate-500">$ cat reportes.json{"\n"}</span>
           {hidratado ? coloreado : <span className="text-slate-500">…</span>}
         </pre>
-        <p className="border-t border-slate-800 px-4 py-2 font-mono text-[11px] leading-5 text-slate-500">
+        <p className="border-t border-slate-800 px-4 py-2 font-mono text-xs leading-5 text-slate-500">
           {"// POST /api/reportes → Supabase"}
         </p>
       </div>

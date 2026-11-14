@@ -19,6 +19,28 @@ body {
   min-height: 100vh;
 }
 
+/*
+ * Tailwind v4 deja los botones con el cursor por defecto. Los elementos
+ * interactivos deben invitar al clic (sin afectar a los deshabilitados).
+ */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary,
+label:has(> input[type="checkbox"]:not(:disabled)) {
+  cursor: pointer;
+}
+
+/* Checkboxes y radios con el color de marca en ambos temas. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: #4f46e5;
+}
+
+.dark input[type="checkbox"],
+.dark input[type="radio"] {
+  accent-color: #818cf8;
+}
+
 ::selection {
   background-color: #c7d2fe;
   color: #1e1b4b;

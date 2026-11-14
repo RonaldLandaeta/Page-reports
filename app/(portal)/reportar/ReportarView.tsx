@@ -31,10 +31,10 @@ export function ReportarView({
             <ClockIcon className="size-3.5" />
             Ciclo académico 2026-2
           </span>
-          <h1 className="mt-3 max-w-2xl text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
+          <h1 className="mt-3 max-w-2xl text-balance text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
             Reporta un problema en tu horario
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
+          <p className="mt-2 max-w-2xl text-pretty text-sm leading-6 text-slate-600 dark:text-slate-400">
             Indica la materia y qué está mal. Te entregaremos un ticket único
             para consultar el estado.
           </p>

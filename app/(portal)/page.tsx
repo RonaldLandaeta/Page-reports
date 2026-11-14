@@ -70,12 +70,12 @@ export default function HomePage() {
               Ciclo académico 2026-2
             </span>
 
-            <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-4xl lg:text-5xl">
+            <h1 className="mt-4 text-balance text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-4xl lg:text-5xl">
               Un horario sin errores,{" "}
               <span className="text-indigo-600 dark:text-indigo-400">con seguimiento.</span>
             </h1>
 
-            <p className="mt-4 max-w-xl text-sm leading-6 text-slate-600 dark:text-slate-400 sm:text-base sm:leading-7">
+            <p className="mt-4 max-w-xl text-pretty text-sm leading-6 text-slate-600 dark:text-slate-400 sm:text-base sm:leading-7">
               Reporta errores de prerrequisito, correquisito, reservas o cruces de horario. Recibirás un
               ticket único para consultar el avance de tu caso sin escribir
               correos sueltos.
@@ -122,14 +122,14 @@ export default function HomePage() {
             <div className="relative ml-auto w-72 rotate-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xl">
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-400">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Mi horario
                   </p>
                   <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                     Miércoles
                   </p>
                 </div>
-                <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
                   3 clases
                 </span>
               </div>
@@ -140,20 +140,20 @@ export default function HomePage() {
                     key={clase.materia}
                     className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${clase.color}`}
                   >
-                    <span className="font-mono text-[11px] font-semibold">
+                    <span className="font-mono text-xs font-semibold">
                       {clase.hora}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-semibold">
                         {clase.materia}
                       </p>
-                      <p className="text-[10px] opacity-75">NRC {clase.nrc}</p>
+                      <p className="text-xs opacity-80">NRC {clase.nrc}</p>
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 px-2.5 py-2 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+              <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 px-2.5 py-2 text-xs font-medium text-amber-700 dark:text-amber-300">
                 <span className="size-1.5 rounded-full bg-amber-400" />
                 Un horario por confirmar
               </div>
@@ -178,7 +178,7 @@ export default function HomePage() {
             horario y generar tu ticket.
           </p>
           <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-600 dark:text-indigo-400">
-            Abrir formulario
+            Reportar ahora
             <ArrowRightIcon className="size-4 transition-transform group-hover:translate-x-0.5" />
           </span>
         </Link>
@@ -208,11 +208,11 @@ export default function HomePage() {
         <div className="flex flex-col gap-1">
           <h2
             id="titulo-como-funciona"
-            className="text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100"
+            className="text-balance text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100"
           >
             ¿Cómo funciona?
           </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-pretty text-sm text-slate-500 dark:text-slate-400">
             Un flujo corto, con reglas claras y un código para dar seguimiento.
           </p>
         </div>
@@ -239,11 +239,11 @@ export default function HomePage() {
 
       <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-5 py-4 text-xs leading-5 text-slate-500 dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between">
         <p className="flex items-start gap-2">
-          <ShieldIcon className="mt-0.5 size-4 shrink-0 text-slate-400 dark:text-slate-400" />
-          Los reportes se guardan en Supabase. La verificación de correo y los
-          tickets se validan en el servidor.
+          <ShieldIcon className="mt-0.5 size-4 shrink-0 text-slate-500 dark:text-slate-400" />
+          Verificación por correo y validación en el servidor: tus datos no se
+          comparten con terceros.
         </p>
-        <p className="flex shrink-0 items-center gap-2 text-slate-400 dark:text-slate-400">
+        <p className="flex shrink-0 items-center gap-2 text-slate-500 dark:text-slate-400">
           <MailIcon className="size-4" />
           Límite: {CONFIG.maxReportesPorDia} por día
         </p>

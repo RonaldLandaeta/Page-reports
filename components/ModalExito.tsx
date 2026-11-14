@@ -30,16 +30,48 @@ export function ModalExito({
 }: ModalExitoProps) {
   const [copiado, setCopiado] = useState(false);
   const cerrarRef = useRef<HTMLButtonElement>(null);
+  const dialogoRef = useRef<HTMLDivElement>(null);
   // Ref para que un onClose nuevo en cada render no reinicie foco ni scroll.
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
   useEffect(() => {
+    const enfocadoPrevio =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
     cerrarRef.current?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         onCloseRef.current();
+        return;
+      }
+
+      // El foco no debe escapar del diálogo mientras está abierto.
+      if (event.key !== "Tab") return;
+
+      const contenedor = dialogoRef.current;
+      if (!contenedor) return;
+
+      const focos = Array.from(
+        contenedor.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((elemento) => !elemento.hasAttribute("disabled"));
+
+      if (focos.length === 0) return;
+
+      const primero = focos[0];
+      const ultimo = focos[focos.length - 1];
+
+      if (event.shiftKey && document.activeElement === primero) {
+        event.preventDefault();
+        ultimo.focus();
+      } else if (!event.shiftKey && document.activeElement === ultimo) {
+        event.preventDefault();
+        primero.focus();
       }
     }
 
@@ -50,6 +82,7 @@ export function ModalExito({
     return () => {
       document.body.style.overflow = overflowPrevio;
       document.removeEventListener("keydown", handleKeyDown);
+      enfocadoPrevio?.focus({ preventScroll: true });
     };
   }, []);
 
@@ -71,18 +104,18 @@ export function ModalExito({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button
-        type="button"
-        tabIndex={-1}
-        aria-label="Cerrar alerta de éxito"
+      <div
+        aria-hidden="true"
         onClick={onClose}
-        className="animate-fade-in absolute inset-0 h-full w-full cursor-default bg-slate-900/50 dark:bg-black/70 backdrop-blur-sm"
+        className="animate-fade-in absolute inset-0 h-full w-full bg-slate-900/50 dark:bg-black/70 backdrop-blur-sm"
       />
 
       <div
+        ref={dialogoRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="titulo-reporte-exitoso"
+        aria-describedby="descripcion-reporte-exitoso"
         className="animate-modal-in relative w-full max-w-md overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-2xl ring-1 ring-slate-900/5 dark:ring-white/10"
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 dark:border-slate-800 px-6 py-5">
@@ -97,7 +130,10 @@ export function ModalExito({
               >
                 Reporte registrado
               </h2>
-              <p className="mt-1 text-sm leading-5 text-slate-500 dark:text-slate-400">
+              <p
+                id="descripcion-reporte-exitoso"
+                className="mt-1 text-sm leading-5 text-slate-500 dark:text-slate-400"
+              >
                 Recibimos tu reporte correctamente. El equipo de horarios lo
                 revisará.
               </p>
@@ -109,7 +145,7 @@ export function ModalExito({
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="rounded-lg p-1.5 text-slate-400 dark:text-slate-400 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className="flex size-10 items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <CloseIcon className="size-5" />
           </button>
@@ -127,11 +163,14 @@ export function ModalExito({
             <button
               type="button"
               onClick={copiarTicket}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300 shadow-sm transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300 shadow-sm transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
             >
               <CopyIcon className="size-3.5" />
               {copiado ? "Copiado" : "Copiar"}
             </button>
+            <span role="status" className="sr-only">
+              {copiado ? "Ticket copiado al portapapeles." : ""}
+            </span>
           </div>
 
           <dl className="mt-5 space-y-3 text-sm">
@@ -188,7 +227,7 @@ export function ModalExito({
             <button
               type="button"
               onClick={onHacerOtro}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               <DocumentIcon className="size-4" />
               Hacer otro reporte
@@ -196,12 +235,12 @@ export function ModalExito({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:bg-indigo-800"
+              className="min-h-11 flex-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 active:bg-indigo-800"
             >
               Entendido
             </button>
           </div>
-          <p className="mt-2 text-center text-[11px] leading-4 text-slate-500 dark:text-slate-400">
+          <p className="mt-2 text-center text-xs leading-4 text-slate-500 dark:text-slate-400">
             «Hacer otro reporte» conserva tu cédula, nombre, correo y la
             verificación para agilizar el siguiente ticket.
           </p>

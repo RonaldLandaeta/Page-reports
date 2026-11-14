@@ -22,11 +22,11 @@ const formatoFecha = new Intl.DateTimeFormat("es-VE", {
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 const boton =
-  "rounded-xl px-3.5 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 items-center justify-center rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-50";
 const botonPrimario = `${boton} bg-indigo-600 text-white hover:bg-indigo-700`;
 const botonSecundario = `${boton} border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800`;
 const campo =
-  "rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10";
+  "rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-base text-slate-900 dark:text-slate-100 transition-colors placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 sm:text-sm";
 
 interface RespuestaApi {
   ok: boolean;
@@ -349,7 +349,12 @@ export function AdminView({
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Reportes de horarios</h1>
+        <div>
+          <h1 className="text-balance text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Reportes de horarios</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Revisa, actualiza y descarga los reportes recibidos.
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
           <button type="button" onClick={salir} className={botonSecundario}>
@@ -432,7 +437,7 @@ export function AdminView({
           <button
             type="button"
             onClick={alternarTodosContraidos}
-            className="text-xs font-semibold text-indigo-600 transition-colors hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
+            className="rounded text-xs font-semibold text-indigo-600 transition-colors hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300"
           >
             {todosContraidos ? "Expandir todas las cédulas" : "Contraer todas las cédulas"}
           </button>
@@ -461,7 +466,7 @@ export function AdminView({
                     onChange={() => alternarGrupo(idsGrupo)}
                   />
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Cédula
                     </p>
                     <p className="font-mono text-lg font-bold tracking-wide text-slate-900 dark:text-slate-100">
@@ -531,7 +536,7 @@ export function AdminView({
                         className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500" />
                       {ESTADOS_REPORTE.filter((e) => e.value !== r.estado).map((e) => (
                         <button key={e.value} type="button" disabled={guardando === r.id} onClick={() => void cambiar(r, e.value)}
-                          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:bg-indigo-400">
+                          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-900 disabled:bg-indigo-400">
                           Pasar a «{e.label}»
                         </button>
                       ))}
@@ -706,7 +711,7 @@ function PanelAdministradores({
   return (
     <section className="mt-10 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
       <button type="button" onClick={() => setAbierto((v) => !v)} aria-expanded={abierto}
-        className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-800 dark:text-slate-200">
+        className="flex w-full items-center justify-between rounded-lg text-left text-sm font-semibold text-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-200">
         Administradores
         <span aria-hidden="true">{abierto ? "−" : "+"}</span>
       </button>
@@ -735,11 +740,11 @@ function PanelAdministradores({
                   <span className="flex flex-wrap gap-2">
                     <button type="button" disabled={enviando}
                       onClick={() => void cambiarRol(fila, fila.rol === "super" ? "admin" : "super")}
-                      className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
+                      className="rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-300 dark:hover:bg-slate-800 disabled:opacity-50">
                       {fila.rol === "super" ? "Quitar super" : "Hacer super"}
                     </button>
                     <button type="button" disabled={enviando} onClick={() => void quitar(fila)}
-                      className="rounded-lg border border-rose-200 dark:border-rose-500/30 px-3 py-1 text-xs font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-500/15 disabled:opacity-50">
+                      className="rounded-lg border border-rose-200 dark:border-rose-500/30 px-3 py-1.5 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 dark:text-rose-300 dark:hover:bg-rose-500/15 disabled:opacity-50">
                       Quitar acceso
                     </button>
                   </span>
@@ -763,7 +768,7 @@ function PanelAdministradores({
                 onChange={(e) => setClave(e.target.value)} className={`${campo} mt-1 w-full`} />
             </div>
             <div>
-              <label htmlFor="nuevo-admin-rol" className="block text-xs font-medium text-slate-600">Rol</label>
+              <label htmlFor="nuevo-admin-rol" className="block text-xs font-medium text-slate-600 dark:text-slate-400">Rol</label>
               <select id="nuevo-admin-rol" value={rol} onChange={(e) => setRol(e.target.value as Rol)}
                 className={`${campo} mt-1`}>
                 <option value="admin">Admin</option>
