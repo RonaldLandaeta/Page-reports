@@ -76,7 +76,7 @@ export default function HomePage() {
             </h1>
 
             <p className="mt-4 max-w-xl text-pretty text-sm leading-6 text-slate-600 dark:text-slate-400 sm:text-base sm:leading-7">
-              Reporta errores de prerrequisito, correquisito, reservas o cruces de horario. Recibirás un
+              Reporta errores al momento de inscribir materias o solicita un cambio de horario. Recibirás un
               ticket único para consultar el avance de tu caso sin escribir
               correos sueltos.
             </p>
