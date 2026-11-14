@@ -6,7 +6,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Horarios Académicos | Portal de reportes",
+    default: "Universidad Católica Andrés Bello | Portal de reportes",
     template: "%s | Horarios Académicos",
   },
   description:

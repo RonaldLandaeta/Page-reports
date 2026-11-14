@@ -27,7 +27,7 @@ export function SiteHeader() {
           </span>
           <span className="hidden sm:block">
             <span className="block text-sm font-semibold leading-tight text-slate-900 dark:text-slate-100">
-              Horarios Académicos
+              Universidad Católica Andrés Bello
             </span>
             <span className="block text-xs text-slate-500 dark:text-slate-400">
               Portal de reportes
