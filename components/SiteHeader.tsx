@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { ClockIcon } from "./icons";
+import { LogoMarca } from "./LogoMarca";
 import { ThemeToggle } from "./ThemeToggle";
 
 const ENLACES = [
@@ -22,9 +22,7 @@ export function SiteHeader() {
           href="/"
           className="flex shrink-0 items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
         >
-          <span className="flex size-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
-            <ClockIcon className="size-5" />
-          </span>
+          <LogoMarca />
           <span className="hidden sm:block">
             <span className="block text-sm font-semibold leading-tight text-slate-900 dark:text-slate-100">
               Universidad Católica Andrés Bello
