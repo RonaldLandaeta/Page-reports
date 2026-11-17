@@ -241,7 +241,13 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      reportes_con_llegada: {
+        Row: {
+          ci: string
+          numero_llegada: number
+        }
+        Relationships: []
+      }
     }
     Functions: {
       cambiar_estado_reporte: {
@@ -417,6 +423,8 @@ export type CompositeTypes<
 export type EstadoReporteDb = Database["public"]["Enums"]["estado_reporte"]
 export type TipoErrorDb = Database["public"]["Enums"]["tipo_error_reporte"]
 export type FilaReporteDb = Database["public"]["Tables"]["reportes"]["Row"]
+export type FilaEventoDb =
+  Database["public"]["Tables"]["reporte_eventos"]["Row"]
 
 export const Constants = {
   graphql_public: {

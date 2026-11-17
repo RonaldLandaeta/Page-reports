@@ -4,6 +4,24 @@
  * lib/catalogos.ts.
  */
 
+/** Entrada del historial de un reporte (tabla public.reporte_eventos). */
+export interface EventoReporte {
+  id: number;
+  /** `null` en el evento automático de creación. */
+  estadoAnterior: EstadoReporte | null;
+  estadoNuevo: EstadoReporte;
+  nota: string;
+  /** Administrador que hizo el cambio; `null` en eventos automáticos. */
+  adminEmail: string | null;
+  creadoEn: string;
+}
+
+/** Nota del último cambio a «Resuelto», tal como la ve quien consulta. */
+export interface NotaReporte {
+  nota: string;
+  creadoEn: string;
+}
+
 export type TipoError =
   | "error-prerrequisito"
   | "error-correquisito"
@@ -60,4 +78,10 @@ export interface Reporte {
   estado: EstadoReporte;
   creadoEn: string;
   actualizadoEn: string;
+  /** Orden de llegada de la cédula (1 = primera). Solo lo entrega el panel admin. */
+  numeroLlegada?: number;
+  /** Historial de estados y notas. Solo lo entrega el panel admin. */
+  eventos?: EventoReporte[];
+  /** Nota de resolución. Solo la entrega la consulta pública y solo si está resuelto. */
+  ultimaNota?: NotaReporte;
 }

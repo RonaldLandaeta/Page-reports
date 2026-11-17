@@ -280,6 +280,65 @@ async function aplicar(db, archivos) {
       ('00000000-0000-0000-0000-0000000000a2', 'admin');
   `);
 
+  // 0011: número de llegada por cédula sobre todo el histórico.
+  const llegadas = await db.query(`
+    select ci,
+           min(numero_llegada)::int as numero,
+           count(distinct numero_llegada)::int as numeros
+      from public.reportes_con_llegada
+     group by ci
+     order by numero
+  `);
+  afirmar(
+    llegadas.rows.length === 4,
+    "la vista reportes_con_llegada cubre todas las cédulas",
+  );
+  afirmar(
+    llegadas.rows.every((fila) => Number(fila.numeros) === 1),
+    "cada cédula conserva un único número de llegada",
+  );
+  const numerosLlegada = llegadas.rows.map((fila) => Number(fila.numero));
+  afirmar(
+    numerosLlegada.every((numero, indice) => numero === indice + 1),
+    "los números de llegada son 1..N sin huecos ni repetidos",
+  );
+
+  // El número es fijo: otro reporte de una cédula conocida no lo cambia, una
+  // cédula nueva recibe el siguiente y borrar un reporte no renumera a nadie.
+  const antes = await db.query(
+    `select ci, numero_llegada from public.reportes_con_llegada order by ci`,
+  );
+  const ultimoNumero = Math.max(...numerosLlegada);
+  await db.exec(`
+    insert into public.reportes (
+      ci, nombre, correo, nrc, materia_codigo, materia_nombre,
+      tipo_error, motivo
+    ) values
+    ('11111111', 'Ana Prueba', 'a@universidad.edu.ve', '9', 'M-9', 'Materia 9', 'cambio-horario', 'Motivo suficientemente largo'),
+    ('99999999', 'Nueva Prueba', 'n@universidad.edu.ve', '8', 'M-8', 'Materia 8', 'cambio-horario', 'Motivo suficientemente largo');
+  `);
+  const despues = await db.query(
+    `select ci, numero_llegada from public.reportes_con_llegada order by ci`,
+  );
+  const mapaDespues = new Map(despues.rows.map((f) => [f.ci, Number(f.numero_llegada)]));
+  afirmar(
+    antes.rows.every((f) => mapaDespues.get(f.ci) === Number(f.numero_llegada)),
+    "reportar otra vez no cambia el número de llegada",
+  );
+  afirmar(
+    mapaDespues.get("99999999") === ultimoNumero + 1,
+    "una cédula nueva recibe el siguiente número",
+  );
+  await db.exec(`delete from public.reportes where ci = '99999999'`);
+  const sinBorrada = await db.query(
+    `select count(*)::int as n from public.reportes_con_llegada
+      where numero_llegada <= ${ultimoNumero}`,
+  );
+  afirmar(
+    sinBorrada.rows[0].n === ultimoNumero,
+    "borrar un reporte no renumera a las demás cédulas",
+  );
+
   const intentar = async (sql) => {
     try {
       await db.exec(sql);
@@ -454,6 +513,17 @@ async function aplicar(db, archivos) {
   afirmar(fila.rows[0].tipo_error === "cruce-horario", "tipo convertido");
   afirmar(fila.rows[0].estado === "en-revision", "estado conservado");
 
+  const llegadaVieja = await db.query(`
+    select l.numero_llegada
+      from public.reportes_con_llegada l
+      join public.reportes r using (ci)
+     where r.ticket = 'TK-654321'
+  `);
+  afirmar(
+    Number(llegadaVieja.rows[0].numero_llegada) === 1,
+    "el reporte viejo recibe la llegada #1",
+  );
+
   await db.close();
 }
 
@@ -473,6 +543,7 @@ async function aplicar(db, archivos) {
     "0007_esquema_consistente.sql",
     "0008_crear_reporte_atomico.sql",
     "0010_ticket_consultas.sql",
+    "0011_numero_llegada.sql",
   ]);
 
   // Reproduce lo que había en el proyecto real: permisos por defecto de
@@ -545,6 +616,7 @@ async function aplicar(db, archivos) {
       "codigos_verificacion",
       "admin_intentos",
       "consulta_intentos",
+      "cedula_llegadas",
     ]) {
       for (const tipo of ["select", "insert", "update", "delete"]) {
         if (await privilegio(rol, tabla, tipo)) {
@@ -554,6 +626,16 @@ async function aplicar(db, archivos) {
     }
   }
   afirmar(true, "anon y authenticated no tienen ningún permiso sobre las tablas");
+
+  afirmar(
+    !(await privilegio("anon", "reportes_con_llegada", "select")) &&
+      !(await privilegio("authenticated", "reportes_con_llegada", "select")),
+    "anon/authenticated no pueden leer la vista de llegada",
+  );
+  afirmar(
+    await privilegio("service_role", "reportes_con_llegada", "select"),
+    "service_role sí puede leer la vista de llegada",
+  );
 
   afirmar(
     (await privilegio("service_role", "reportes", "select")) &&

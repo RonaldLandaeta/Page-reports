@@ -5,8 +5,8 @@ import { randomInt } from "node:crypto";
 import type { CodigoErrorApi } from "@/lib/api/respuestas";
 import { CONFIG } from "@/lib/config";
 import { obtenerSupabaseAdmin } from "@/lib/supabase/admin";
-import type { FilaReporteDb } from "@/lib/supabase/types";
-import type { Reporte, TipoError } from "@/lib/types";
+import type { FilaEventoDb, FilaReporteDb } from "@/lib/supabase/types";
+import type { EventoReporte, Reporte, TipoError } from "@/lib/types";
 
 export type { FilaReporteDb };
 
@@ -49,6 +49,70 @@ export function mapearReporte(fila: FilaReporteDb): Reporte {
     creadoEn: fila.creado_en,
     actualizadoEn: fila.actualizado_en,
   };
+}
+
+/** Traduce una fila del historial al modelo de la aplicación. */
+export function mapearEvento(fila: FilaEventoDb): EventoReporte {
+  return {
+    id: fila.id,
+    estadoAnterior: fila.estado_anterior,
+    estadoNuevo: fila.estado_nuevo,
+    nota: fila.nota ?? "",
+    adminEmail: fila.admin_email,
+    creadoEn: fila.creado_en,
+  };
+}
+
+const EVENTOS_POR_PAGINA = 1_000;
+const MAX_EVENTOS_POR_LOTE = 20_000;
+
+/**
+ * Carga el historial de los reportes visibles en pasadas paginadas (PostgREST
+ * devuelve 1000 filas por petición). El historial es opcional: si falla, el
+ * panel sigue mostrando los reportes sin él.
+ */
+export async function cargarEventosDeReportes(
+  ids: string[],
+): Promise<Map<string, EventoReporte[]>> {
+  const mapa = new Map<string, EventoReporte[]>();
+  if (ids.length === 0) return mapa;
+
+  for (let inicio = 0; inicio < ids.length; inicio += 100) {
+    const lote = ids.slice(inicio, inicio + 100);
+
+    for (
+      let desde = 0;
+      desde < MAX_EVENTOS_POR_LOTE;
+      desde += EVENTOS_POR_PAGINA
+    ) {
+      const { data, error } = await obtenerSupabaseAdmin()
+        .from("reporte_eventos")
+        .select(
+          "id,reporte_id,estado_anterior,estado_nuevo,nota,admin_email,creado_en",
+        )
+        .in("reporte_id", lote)
+        .order("id", { ascending: true })
+        .range(desde, desde + EVENTOS_POR_PAGINA - 1);
+
+      if (error) {
+        console.error(
+          "[supabase/reportes] no se pudo cargar el historial:",
+          error,
+        );
+        return mapa;
+      }
+
+      for (const fila of data ?? []) {
+        const eventos = mapa.get(fila.reporte_id) ?? [];
+        eventos.push(mapearEvento(fila));
+        mapa.set(fila.reporte_id, eventos);
+      }
+
+      if ((data?.length ?? 0) < EVENTOS_POR_PAGINA) break;
+    }
+  }
+
+  return mapa;
 }
 
 const CODIGOS_API: ReadonlySet<string> = new Set<CodigoErrorApi>([
@@ -379,5 +443,38 @@ export async function buscarReporteEnDb(
     return null;
   }
 
-  return mapearReporte(data);
+  const reporte = mapearReporte(data);
+
+  // El alumno solo ve la nota del último cambio a «Resuelto». Las demás notas
+  // son internas. Si el ticket no está resuelto no hace falta consultar nada.
+  if (reporte.estado !== "resuelto") return reporte;
+
+  // `estado_anterior` nulo = eventos automáticos (creación, historial
+  // reconstruido). Si el último cambio a «Resuelto» no trae nota no se cae a
+  // una nota vieja: ese ticket se muestra resuelto sin nota.
+  const { data: evento, error: errorEvento } = await obtenerSupabaseAdmin()
+    .from("reporte_eventos")
+    .select("nota,creado_en")
+    .eq("reporte_id", data.id)
+    .eq("estado_nuevo", "resuelto")
+    .not("estado_anterior", "is", null)
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (errorEvento) {
+    // La consulta del estado no debe fallar solo porque falta la nota.
+    console.error(
+      "[supabase/reportes] no se pudo leer la nota de resolución:",
+      errorEvento,
+    );
+    return reporte;
+  }
+
+  return evento?.nota
+    ? {
+        ...reporte,
+        ultimaNota: { nota: evento.nota, creadoEn: evento.creado_en },
+      }
+    : reporte;
 }

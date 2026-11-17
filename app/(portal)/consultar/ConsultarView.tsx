@@ -6,6 +6,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import {
   AlertIcon,
   ArrowRightIcon,
+  ChatIcon,
   ClockIcon,
   DocumentIcon,
   MailIcon,
@@ -346,6 +347,23 @@ export function ConsultarView() {
                 <span className="break-all">{reporte.correo}</span>
               </Dato>
             </dl>
+
+            {reporte.ultimaNota && (
+              <div className="border-t border-slate-100 dark:border-slate-800 px-5 py-4">
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 dark:border-indigo-500/30 dark:bg-indigo-500/10">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                    <ChatIcon className="size-3.5" />
+                    Nota del equipo
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-800 dark:text-slate-100">
+                    {reporte.ultimaNota.nota}
+                  </p>
+                  <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                    Resuelto el {formatoFecha.format(new Date(reporte.ultimaNota.creadoEn))}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="border-t border-slate-100 dark:border-slate-800 px-5 py-4">
               <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Motivo</p>

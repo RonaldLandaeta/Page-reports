@@ -9,7 +9,7 @@ import {
   getTipoErrorLabel,
 } from "@/lib/catalogos";
 import { postJson } from "@/lib/api-cliente";
-import type { EstadoReporte, Reporte } from "@/lib/types";
+import type { EstadoReporte, EventoReporte, Reporte } from "@/lib/types";
 
 import { ChevronDownIcon } from "@/components/icons";
 import { LogoMarca } from "@/components/LogoMarca";
@@ -42,6 +42,13 @@ async function leerRespuesta(respuesta: Response): Promise<RespuestaApi> {
   } catch {
     return { ok: false, mensaje: "Respuesta inesperada del servidor." };
   }
+}
+
+/** «Pendiente → En revisión» para el historial de cada ticket. */
+function etiquetaEvento(evento: EventoReporte): string {
+  return evento.estadoAnterior
+    ? `${getEstadoReporteLabel(evento.estadoAnterior)} → ${getEstadoReporteLabel(evento.estadoNuevo)}`
+    : getEstadoReporteLabel(evento.estadoNuevo);
 }
 
 /** Checkbox de grupo con estado intermedio cuando hay tickets sueltos marcados. */
@@ -87,6 +94,9 @@ export function AdminView({
   const [aviso, setAviso] = useState<string | null>(null);
   const [guardando, setGuardando] = useState<string | null>(null);
   const [notas, setNotas] = useState<Record<string, string>>({});
+  const [historialAbierto, setHistorialAbierto] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
 
   const [seleccion, setSeleccion] = useState<ReadonlySet<string>>(new Set());
   const [contraidos, setContraidos] = useState<ReadonlySet<string>>(new Set());
@@ -156,10 +166,9 @@ export function AdminView({
       const datos = await leerRespuesta(respuesta);
       if (!datos.ok) throw new Error(datos.mensaje);
 
-      setReportes((previos) =>
-        previos.map((item) => (item.id === reporte.id ? { ...item, estado: nuevo } : item)),
-      );
       setNotas((previas) => ({ ...previas, [reporte.id]: "" }));
+      // Se recarga para que el historial incluya el cambio y su nota.
+      await cargar();
     } catch (fallo) {
       setError(fallo instanceof Error && fallo.message ? fallo.message : "No pudimos cambiar el estado.");
     } finally {
@@ -169,6 +178,14 @@ export function AdminView({
 
   function alternar(id: string) {
     setSeleccion((previa) => {
+      const siguiente = new Set(previa);
+      if (!siguiente.delete(id)) siguiente.add(id);
+      return siguiente;
+    });
+  }
+
+  function alternarHistorial(id: string) {
+    setHistorialAbierto((previa) => {
       const siguiente = new Set(previa);
       if (!siguiente.delete(id)) siguiente.add(id);
       return siguiente;
@@ -195,11 +212,17 @@ export function AdminView({
     });
   }
 
-  /** Agrupa por cédula conservando el orden de llegada (más reciente primero). */
+  /** Agrupa por cédula y ordena como cola de atención: primero la llegada #1. */
   const grupos = useMemo(() => {
     const mapa = new Map<
       string,
-      { ci: string; nombre: string; correo: string; reportes: Reporte[] }
+      {
+        ci: string;
+        nombre: string;
+        correo: string;
+        numeroLlegada?: number;
+        reportes: Reporte[];
+      }
     >();
 
     for (const reporte of reportes) {
@@ -212,12 +235,38 @@ export function AdminView({
           ci: reporte.ci,
           nombre: reporte.nombre,
           correo: reporte.correo,
+          numeroLlegada: reporte.numeroLlegada,
           reportes: [reporte],
         });
       }
     }
 
-    return [...mapa.values()];
+    const lista = [...mapa.values()];
+
+    for (const grupo of lista) {
+      // Dentro de cada cédula, del ticket más antiguo al más nuevo.
+      grupo.reportes.sort(
+        (a, b) =>
+          a.creadoEn.localeCompare(b.creadoEn) || a.id.localeCompare(b.id),
+      );
+      grupo.numeroLlegada = grupo.reportes[0]?.numeroLlegada;
+    }
+
+    return lista.sort((a, b) => {
+      if (a.numeroLlegada !== undefined && b.numeroLlegada !== undefined) {
+        if (a.numeroLlegada !== b.numeroLlegada) {
+          return a.numeroLlegada - b.numeroLlegada;
+        }
+      } else if (a.numeroLlegada !== undefined) {
+        return -1;
+      } else if (b.numeroLlegada !== undefined) {
+        return 1;
+      }
+
+      return (a.reportes[0]?.creadoEn ?? "").localeCompare(
+        b.reportes[0]?.creadoEn ?? "",
+      );
+    });
   }, [reportes]);
 
   const todosContraidos =
@@ -412,7 +461,7 @@ export function AdminView({
             ))}
           </select>
           <input type="text" maxLength={500} value={loteNota} onChange={(e) => setLoteNota(e.target.value)}
-            placeholder="Nota (opcional)" aria-label="Nota para el lote" className={`${campo} min-w-0 flex-1`} />
+            placeholder="Nota del cambio (opcional)" aria-label="Nota para el lote" className={`${campo} min-w-0 flex-1`} />
           <button type="button" disabled={trabajando || seleccion.size === 0 || !loteEstado}
             onClick={() => void cambiarLote()} className={botonPrimario}>
             Aplicar a {seleccion.size}
@@ -483,6 +532,14 @@ export function AdminView({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  {grupo.numeroLlegada !== undefined && (
+                    <span
+                      title="Orden de llegada de esta cédula"
+                      className="inline-flex items-center rounded-full bg-indigo-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm"
+                    >
+                      Llegada #{grupo.numeroLlegada}
+                    </span>
+                  )}
                   <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/15 dark:text-indigo-300">
                     {grupo.reportes.length} ticket{grupo.reportes.length === 1 ? "" : "s"}
                   </span>
@@ -507,46 +564,112 @@ export function AdminView({
                 hidden={contraido}
                 className="divide-y divide-slate-100 dark:divide-slate-800"
               >
-                {grupo.reportes.map((r) => (
-                  <li key={r.id} className="px-4 py-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="flex min-w-0 gap-3">
-                        <input type="checkbox" checked={seleccion.has(r.id)} onChange={() => alternar(r.id)}
-                          aria-label={`Seleccionar ${r.ticket}`} className="mt-1 h-5 w-5 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="font-mono text-sm font-bold text-indigo-700 dark:text-indigo-300">{r.ticket}</p>
-                          <p className="mt-0.5 text-sm font-semibold text-slate-800 dark:text-slate-200">
-                            {r.materiaNombre} <span className="font-normal text-slate-500 dark:text-slate-400">· NRC {r.nrc} · {r.materiaCodigo}</span>
-                          </p>
-                          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                            {getTipoErrorLabel(r.tipo_error)}
-                            {r.tipoErrorDetalle ? ` (${r.tipoErrorDetalle})` : ""} · {formatoFecha.format(new Date(r.creadoEn))}
-                          </p>
+                {grupo.reportes.map((r) => {
+                  const eventos = r.eventos ?? [];
+                  const historialVisible = historialAbierto.has(r.id);
+                  // La nota que ve el alumno: la del último cambio a «Resuelto».
+                  const eventoVisible =
+                    r.estado === "resuelto"
+                      ? [...eventos]
+                          .reverse()
+                          .find((e) => e.estadoNuevo === "resuelto" && e.estadoAnterior !== null)
+                      : undefined;
+
+                  return (
+                    <li key={r.id} className="px-4 py-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex min-w-0 gap-3">
+                          <input type="checkbox" checked={seleccion.has(r.id)} onChange={() => alternar(r.id)}
+                            aria-label={`Seleccionar ${r.ticket}`} className="mt-1 h-5 w-5 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="font-mono text-sm font-bold text-indigo-700 dark:text-indigo-300">{r.ticket}</p>
+                            <p className="mt-0.5 text-sm font-semibold text-slate-800 dark:text-slate-200">
+                              {r.materiaNombre} <span className="font-normal text-slate-500 dark:text-slate-400">· NRC {r.nrc} · {r.materiaCodigo}</span>
+                            </p>
+                            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                              {getTipoErrorLabel(r.tipo_error)}
+                              {r.tipoErrorDetalle ? ` (${r.tipoErrorDetalle})` : ""} · {formatoFecha.format(new Date(r.creadoEn))}
+                            </p>
+                          </div>
                         </div>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-300">
+                          {getEstadoReporteLabel(r.estado)}
+                        </span>
                       </div>
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-300">
-                        {getEstadoReporteLabel(r.estado)}
-                      </span>
-                    </div>
 
-                    <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-700 dark:text-slate-300">{r.motivo}</p>
-                    <p className="mt-1.5 break-all text-xs text-slate-500 dark:text-slate-400">
-                      {r.nombre} · {r.correo}
-                    </p>
+                      <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-700 dark:text-slate-300">{r.motivo}</p>
+                      <p className="mt-1.5 break-all text-xs text-slate-500 dark:text-slate-400">
+                        {r.nombre} · {r.correo}
+                      </p>
 
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <input type="text" maxLength={500} placeholder="Nota (opcional)" aria-label={`Nota para ${r.ticket}`}
-                        value={notas[r.id] ?? ""} onChange={(e) => setNotas((p) => ({ ...p, [r.id]: e.target.value }))}
-                        className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-400 sm:text-sm" />
-                      {ESTADOS_REPORTE.filter((e) => e.value !== r.estado).map((e) => (
-                        <button key={e.value} type="button" disabled={guardando === r.id} onClick={() => void cambiar(r, e.value)}
-                          className="min-h-9 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-900 disabled:bg-indigo-400">
-                          Pasar a «{e.label}»
-                        </button>
-                      ))}
-                    </div>
-                  </li>
-                ))}
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <input type="text" maxLength={500} placeholder="Nota del cambio (opcional)" aria-label={`Nota para ${r.ticket}`}
+                          value={notas[r.id] ?? ""} onChange={(e) => setNotas((p) => ({ ...p, [r.id]: e.target.value }))}
+                          className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-400 sm:text-sm" />
+                        {ESTADOS_REPORTE.filter((e) => e.value !== r.estado).map((e) => (
+                          <button key={e.value} type="button" disabled={guardando === r.id} onClick={() => void cambiar(r, e.value)}
+                            className="min-h-9 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-900 disabled:bg-indigo-400">
+                            Pasar a «{e.label}»
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        La nota al pasar a «Resuelto» la verá el alumno; las demás son solo para administradores.
+                      </p>
+
+                      {eventos.length > 0 && (
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() => alternarHistorial(r.id)}
+                            aria-expanded={historialVisible}
+                            aria-controls={`historial-${r.id}`}
+                            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-1 text-xs font-semibold text-slate-600 transition-colors hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400 dark:hover:text-indigo-300"
+                          >
+                            Historial de notas ({eventos.length})
+                            <ChevronDownIcon
+                              className={`size-3.5 transition-transform ${historialVisible ? "rotate-180" : ""}`}
+                            />
+                          </button>
+
+                          {historialVisible && (
+                            <ol
+                              id={`historial-${r.id}`}
+                              className="mt-2 space-y-3 border-l-2 border-slate-200 pl-3 dark:border-slate-700"
+                            >
+                              {eventos.map((evento) => (
+                                <li key={evento.id}>
+                                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                                    {etiquetaEvento(evento)} · {formatoFecha.format(new Date(evento.creadoEn))}
+                                    {evento.id === eventoVisible?.id && evento.nota && (
+                                      <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
+                                        Visible para el alumno
+                                      </span>
+                                    )}
+                                  </p>
+                                  {evento.nota ? (
+                                    <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-slate-800 dark:text-slate-200">
+                                      {evento.nota}
+                                    </p>
+                                  ) : (
+                                    <p className="mt-0.5 text-xs italic text-slate-500 dark:text-slate-400">
+                                      Sin nota
+                                    </p>
+                                  )}
+                                  {evento.adminEmail && (
+                                    <p className="mt-0.5 break-all text-xs text-slate-500 dark:text-slate-400">
+                                      {evento.adminEmail}
+                                    </p>
+                                  )}
+                                </li>
+                              ))}
+                            </ol>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </li>
           );

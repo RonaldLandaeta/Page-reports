@@ -15,7 +15,11 @@ import {
   reportesADatosIngreso,
 } from "@/lib/reportes/formato";
 import { obtenerSupabaseAdmin } from "@/lib/supabase/admin";
-import { CAMPOS_PUBLICOS, mapearReporte } from "@/lib/supabase/reportes";
+import {
+  CAMPOS_PUBLICOS,
+  cargarEventosDeReportes,
+  mapearReporte,
+} from "@/lib/supabase/reportes";
 import type { EstadoReporte, Reporte } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -41,6 +45,48 @@ function filtrosDeTexto(estado: unknown, q: unknown): Pick<Filtros, "estado" | "
     estado: typeof estado === "string" ? estado : "",
     q: (typeof q === "string" ? q : "").trim().slice(0, 40),
   };
+}
+
+/** PGRST205/42P01: la vista de la migración 0011 todavía no existe. */
+function faltaVistaLlegada(error: { code?: string } | null): boolean {
+  return error?.code === "42P01" || error?.code === "PGRST205";
+}
+
+/**
+ * Número de llegada de cada cédula visible. Lo calcula la vista sobre todo el
+ * histórico (migración 0011), no sobre la página de 200. Si la migración aún
+ * no está aplicada, el panel sigue funcionando sin números.
+ */
+async function cargarNumerosLlegada(
+  cis: string[],
+): Promise<Map<string, number>> {
+  const numeros = new Map<string, number>();
+  if (cis.length === 0) return numeros;
+
+  const { data, error } = await obtenerSupabaseAdmin()
+    .from("reportes_con_llegada")
+    .select("ci,numero_llegada")
+    .in("ci", cis);
+
+  if (error) {
+    if (faltaVistaLlegada(error)) {
+      console.warn(
+        "[api/admin/reportes] falta la migración 0011 (reportes_con_llegada); se omite el número de llegada.",
+      );
+    } else {
+      console.error(
+        "[api/admin/reportes] no se pudo leer el número de llegada:",
+        error,
+      );
+    }
+    return numeros;
+  }
+
+  for (const fila of data ?? []) {
+    if (!numeros.has(fila.ci)) numeros.set(fila.ci, fila.numero_llegada);
+  }
+
+  return numeros;
 }
 
 /** Misma consulta para la lista y la descarga: los filtros nunca divergen. */
@@ -118,8 +164,26 @@ export async function GET(request: Request) {
       return respuestaError("interno", "No pudimos cargar los reportes.", 500);
     }
 
+    const reportes = (data ?? []).map((fila) => mapearReporte(fila));
+
+    // Número de llegada y notas del historial en paralelo. Ambos son
+    // opcionales: si fallan, la lista se entrega igual.
+    const [numeros, eventos] = await Promise.all([
+      cargarNumerosLlegada([...new Set(reportes.map((r) => r.ci))]),
+      cargarEventosDeReportes(reportes.map((r) => r.id)),
+    ]);
+
     return respuestaOk({
-      reportes: (data ?? []).map((fila) => mapearReporte(fila)),
+      reportes: reportes.map((reporte) => {
+        const numeroLlegada = numeros.get(reporte.ci);
+        const historial = eventos.get(reporte.id);
+
+        return {
+          ...reporte,
+          ...(numeroLlegada !== undefined ? { numeroLlegada } : {}),
+          ...(historial?.length ? { eventos: historial } : {}),
+        };
+      }),
       total: count ?? data?.length ?? 0,
     });
   } catch (error) {
