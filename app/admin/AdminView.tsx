@@ -540,7 +540,7 @@ export function AdminView({
                     >
                       {grupo.numeroLlegada !== undefined && (
                         <>
-                          <span className="inline-flex min-w-8 items-center justify-center rounded-md bg-indigo-600 px-2 py-0.5 text-base font-bold text-white shadow-sm dark:bg-indigo-500">
+                          <span className="inline-flex min-w-5 items-center justify-center rounded bg-indigo-600 px-1.5 text-xs font-bold leading-5 text-white dark:bg-indigo-500">
                             {grupo.numeroLlegada}
                           </span>
                           <span aria-hidden="true" className="text-slate-400 dark:text-slate-500">-</span>
