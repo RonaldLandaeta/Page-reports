@@ -528,7 +528,7 @@ export function AdminView({
                   />
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      {grupo.numeroLlegada !== undefined ? "Llegada-Cédula" : "Cédula"}
+                      {grupo.numeroLlegada !== undefined ? "Cédula" : "Cédula"}
                     </p>
                     <p
                       title={
