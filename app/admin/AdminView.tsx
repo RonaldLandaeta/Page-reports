@@ -87,6 +87,7 @@ export function AdminView({
   const router = useRouter();
   const [reportes, setReportes] = useState<Reporte[]>([]);
   const [total, setTotal] = useState(0);
+  const [llegadaDisponible, setLlegadaDisponible] = useState(true);
   const [estado, setEstado] = useState<"" | EstadoReporte>("");
   const [q, setQ] = useState("");
   const [cargando, setCargando] = useState(true);
@@ -129,6 +130,7 @@ export function AdminView({
       const lista = (datos.reportes as Reporte[] | undefined) ?? [];
       setReportes(lista);
       setTotal(typeof datos.total === "number" ? datos.total : lista.length);
+      setLlegadaDisponible(datos.llegadaDisponible !== false);
 
       // Solo se conserva lo seleccionado que sigue visible.
       const visibles = new Set(lista.map((r) => r.id));
@@ -480,6 +482,12 @@ export function AdminView({
         <p role="status" className="mt-4 rounded-lg border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300">{aviso}</p>
       )}
 
+      {!llegadaDisponible && reportes.length > 0 && (
+        <p role="status" className="mt-4 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+          No se pueden mostrar los números de llegada. Ejecuta <code className="font-mono">supabase/migrations/0011_numero_llegada.sql</code> en el SQL Editor de Supabase (o revisa los logs del servidor si ya la aplicaste) y recarga.
+        </p>
+      )}
+
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-slate-500 dark:text-slate-400" aria-live="polite">
           {cargando
@@ -528,17 +536,17 @@ export function AdminView({
                           ? `Llegada #${grupo.numeroLlegada} · cédula ${grupo.ci}`
                           : undefined
                       }
-                      className="font-mono text-lg font-bold tracking-wide text-slate-900 dark:text-slate-100"
+                      className="flex flex-wrap items-center gap-x-1.5 font-mono text-lg font-bold tracking-wide text-slate-900 dark:text-slate-100"
                     >
                       {grupo.numeroLlegada !== undefined && (
                         <>
-                          <span className="text-indigo-600 dark:text-indigo-400">
+                          <span className="inline-flex min-w-8 items-center justify-center rounded-md bg-indigo-600 px-2 py-0.5 text-base font-bold text-white shadow-sm dark:bg-indigo-500">
                             {grupo.numeroLlegada}
                           </span>
-                          <span className="text-slate-400 dark:text-slate-500">-</span>
+                          <span aria-hidden="true" className="text-slate-400 dark:text-slate-500">-</span>
                         </>
                       )}
-                      {grupo.ci}
+                      <span>{grupo.ci}</span>
                     </p>
                     <p className="mt-0.5 break-all text-xs text-slate-600 dark:text-slate-400">
                       {grupo.nombre} · {grupo.correo}

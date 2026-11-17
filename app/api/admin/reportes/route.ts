@@ -60,9 +60,9 @@ function faltaVistaLlegada(error: { code?: string } | null): boolean {
  */
 async function cargarNumerosLlegada(
   cis: string[],
-): Promise<Map<string, number>> {
+): Promise<{ numeros: Map<string, number>; disponible: boolean }> {
   const numeros = new Map<string, number>();
-  if (cis.length === 0) return numeros;
+  if (cis.length === 0) return { numeros, disponible: true };
 
   const { data, error } = await obtenerSupabaseAdmin()
     .from("reportes_con_llegada")
@@ -80,14 +80,14 @@ async function cargarNumerosLlegada(
         error,
       );
     }
-    return numeros;
+    return { numeros, disponible: false };
   }
 
   for (const fila of data ?? []) {
     if (!numeros.has(fila.ci)) numeros.set(fila.ci, fila.numero_llegada);
   }
 
-  return numeros;
+  return { numeros, disponible: true };
 }
 
 /** Misma consulta para la lista y la descarga: los filtros nunca divergen. */
@@ -169,7 +169,7 @@ export async function GET(request: Request) {
 
     // Número de llegada y notas del historial en paralelo. Ambos son
     // opcionales: si fallan, la lista se entrega igual.
-    const [numeros, eventos] = await Promise.all([
+    const [{ numeros, disponible: llegadaDisponible }, eventos] = await Promise.all([
       cargarNumerosLlegada([...new Set(reportes.map((r) => r.ci))]),
       cargarEventosDeReportes(reportes.map((r) => r.id)),
     ]);
@@ -186,6 +186,8 @@ export async function GET(request: Request) {
         };
       }),
       total: count ?? data?.length ?? 0,
+      // El panel avisa si no hay números de llegada (migración 0011 pendiente).
+      llegadaDisponible,
     });
   } catch (error) {
     console.error("[api/admin/reportes]", error);
