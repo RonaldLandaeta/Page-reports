@@ -26,6 +26,18 @@ export function aFilaReporte(reporte: Reporte): FilaReporte {
   };
 }
 
+// ── Buscador del panel: «llegada-cédula» ────────────────────────────────────
+
+/**
+ * Si el administrador pega «3-32123456» en el buscador, se busca la cédula:
+ * el prefijo de llegada no existe en la columna `ci`. Los tickets («TK-…») y
+ * los códigos de materia («FING-…») empiezan por letras y no se tocan.
+ */
+export function quitarPrefijoLlegada(busqueda: string): string {
+  const coincidencia = /^\d{1,6}-(\d+)$/.exec(busqueda.trim());
+  return coincidencia ? coincidencia[1] : busqueda;
+}
+
 // ── Exportación para administradores ────────────────────────────────────────
 
 const COLUMNAS_EXPORTACION = [

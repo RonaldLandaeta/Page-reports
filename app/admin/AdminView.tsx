@@ -520,9 +520,24 @@ export function AdminView({
                   />
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Cédula
+                      {grupo.numeroLlegada !== undefined ? "Llegada-Cédula" : "Cédula"}
                     </p>
-                    <p className="font-mono text-lg font-bold tracking-wide text-slate-900 dark:text-slate-100">
+                    <p
+                      title={
+                        grupo.numeroLlegada !== undefined
+                          ? `Llegada #${grupo.numeroLlegada} · cédula ${grupo.ci}`
+                          : undefined
+                      }
+                      className="font-mono text-lg font-bold tracking-wide text-slate-900 dark:text-slate-100"
+                    >
+                      {grupo.numeroLlegada !== undefined && (
+                        <>
+                          <span className="text-indigo-600 dark:text-indigo-400">
+                            {grupo.numeroLlegada}
+                          </span>
+                          <span className="text-slate-400 dark:text-slate-500">-</span>
+                        </>
+                      )}
                       {grupo.ci}
                     </p>
                     <p className="mt-0.5 break-all text-xs text-slate-600 dark:text-slate-400">
@@ -532,14 +547,6 @@ export function AdminView({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  {grupo.numeroLlegada !== undefined && (
-                    <span
-                      title="Orden de llegada de esta cédula"
-                      className="inline-flex items-center rounded-full bg-indigo-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm"
-                    >
-                      Llegada #{grupo.numeroLlegada}
-                    </span>
-                  )}
                   <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/15 dark:text-indigo-300">
                     {grupo.reportes.length} ticket{grupo.reportes.length === 1 ? "" : "s"}
                   </span>

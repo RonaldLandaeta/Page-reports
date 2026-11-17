@@ -11,6 +11,7 @@ import { CONFIG } from "@/lib/config";
 import { buscarMateriaPorCodigo } from "@/lib/materias";
 import {
   fechaLocal,
+  quitarPrefijoLlegada,
   reportesACsv,
   reportesADatosIngreso,
 } from "@/lib/reportes/formato";
@@ -43,7 +44,7 @@ interface Filtros {
 function filtrosDeTexto(estado: unknown, q: unknown): Pick<Filtros, "estado" | "q"> {
   return {
     estado: typeof estado === "string" ? estado : "",
-    q: (typeof q === "string" ? q : "").trim().slice(0, 40),
+    q: quitarPrefijoLlegada((typeof q === "string" ? q : "").trim().slice(0, 40)),
   };
 }
 
