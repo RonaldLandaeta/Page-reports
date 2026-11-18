@@ -4,7 +4,11 @@ import {
   respuestaOk,
   texto,
 } from "@/lib/api/respuestas";
-import { esTipoError, tipoRequiereDetalle } from "@/lib/catalogos";
+import {
+  esPerfilAlumno,
+  esTipoError,
+  tipoRequiereDetalle,
+} from "@/lib/catalogos";
 import { enviarConfirmacionReporte } from "@/lib/email";
 import { buscarMateriaPorCodigo } from "@/lib/materias";
 import {
@@ -12,7 +16,7 @@ import {
   type ReporteNuevoDb,
   type ResultadoCreacion,
 } from "@/lib/supabase/reportes";
-import type { TipoError } from "@/lib/types";
+import type { PerfilAlumno, TipoError } from "@/lib/types";
 import {
   CEDULA_MAX_DIGITOS,
   CEDULA_MIN_DIGITOS,
@@ -41,6 +45,7 @@ export async function POST(request: Request) {
   const ci = texto(cuerpo, "ci");
   const nombre = texto(cuerpo, "nombre").replace(/\s+/g, " ");
   const correo = texto(cuerpo, "correo").toLowerCase();
+  const perfilEnviado = texto(cuerpo, "perfil");
   const materiaCodigo = texto(cuerpo, "materia_codigo");
   const tipoError = texto(cuerpo, "tipo_error");
   const detalleEnviado = texto(cuerpo, "tipo_error_detalle").replace(/\s+/g, " ");
@@ -65,6 +70,18 @@ export async function POST(request: Request) {
     campos.correo = "Ingresa un correo electrónico válido.";
   } else if (!esCorreoInstitucional(correo)) {
     campos.correo = mensajeCorreoInstitucional();
+  }
+
+  // Los canales que aún no preguntan el perfil (chatbot) envían el campo
+  // vacío: se asume «Alumno». Un valor desconocido sí es un error.
+  let perfil: PerfilAlumno = "Alumno";
+
+  if (perfilEnviado !== "") {
+    if (esPerfilAlumno(perfilEnviado)) {
+      perfil = perfilEnviado;
+    } else {
+      campos.perfil = "Selecciona un tipo de alumno válido.";
+    }
   }
 
   if (!materia) {
@@ -124,6 +141,7 @@ export async function POST(request: Request) {
     ci,
     nombre,
     correo,
+    perfil,
     nrc: materia.nrc,
     materia_codigo: materia.codigo,
     materia_nombre: materia.nombre,

@@ -201,6 +201,7 @@ export type Database = {
           motivo: string
           nombre: string
           nrc: string
+          perfil: string
           ticket: string
           tipo_error: Database["public"]["Enums"]["tipo_error_reporte"]
           tipo_error_detalle: string
@@ -217,6 +218,7 @@ export type Database = {
           motivo: string
           nombre: string
           nrc: string
+          perfil?: string
           ticket?: string
           tipo_error: Database["public"]["Enums"]["tipo_error_reporte"]
           tipo_error_detalle?: string
@@ -233,6 +235,7 @@ export type Database = {
           motivo?: string
           nombre?: string
           nrc?: string
+          perfil?: string
           ticket?: string
           tipo_error?: Database["public"]["Enums"]["tipo_error_reporte"]
           tipo_error_detalle?: string
@@ -278,6 +281,7 @@ export type Database = {
           p_motivo: string
           p_nombre: string
           p_nrc: string
+          p_perfil?: string
           p_tipo_error: Database["public"]["Enums"]["tipo_error_reporte"]
           p_tipo_error_detalle: string
         }

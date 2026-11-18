@@ -73,6 +73,7 @@ async function aplicar(db, archivos) {
     porNombre.tipo_error_detalle === "text",
     "reportes.tipo_error_detalle existe",
   );
+  afirmar(porNombre.perfil === "text", "reportes.perfil existe");
   afirmar(!("materia_aula" in porNombre), "reportes.materia_aula fue eliminada");
   afirmar(porNombre.estado === "estado_reporte", "estado usa el enum");
   afirmar(
@@ -160,6 +161,22 @@ async function aplicar(db, archivos) {
 
   const creado = await rpc("87654321", "FING-02002", "cruce-horario");
   afirmar(creado.rows[0].r.ok === true, "crear_reporte inserta el reporte");
+  afirmar(
+    creado.rows[0].r.reporte.perfil === "Alumno",
+    "crear_reporte usa «Alumno» si no se indica el perfil",
+  );
+
+  const conPerfil = await db.query(
+    `select public.crear_reporte(
+       '87654321', 'Persona Prueba', 'persona@universidad.edu.ve', '02004',
+       'FING-02004', 'Materia con perfil', 'cruce-horario',
+       '', 'Motivo suficientemente largo', 'Deportista'
+     ) as r`,
+  );
+  afirmar(
+    conPerfil.rows[0].r.reporte.perfil === "Deportista",
+    "crear_reporte guarda el perfil indicado",
+  );
 
   const duplicado = await rpc("87654321", "FING-02002", "cruce-horario");
   afirmar(

@@ -37,7 +37,8 @@ Malla curricular ── vive en el repositorio (lib/materias), nunca en Supabase
 
 ## Funcionalidad
 
-- **Formulario tradicional** con cédula, nombre, correo, materia (se envía
+- **Formulario tradicional** con cédula, nombre, correo, tipo de alumno
+  (`Alumno`, `Beca trabajo`, `Deportista` o `Colaboradores`), materia (se envía
   `materia_codigo`; la lista muestra `[nroCurso] nombre` y el horario de la
   materia elegida), tipo de error y motivo (15 a 600 caracteres).
 - **Tipos de error** (slug → etiqueta): `error-prerrequisito` → «Error de
@@ -186,10 +187,11 @@ tipos se ignora).
 3. Roles: `admin` gestiona reportes; `super` además agrega/quita
    administradores y cambia roles (sección «Administradores», solo visible para
    super). Un trigger impide dejar el sistema sin ningún super.
-4. Lotes: marca reportes y pásalos de estado juntos, o descárgalos (CSV para
-   Excel o JSON para app_ingresos), sea la selección o todo lo que cumpla el
-   filtro (hasta 5000). Al descargar, los «Pendiente de revisión» pasan a «En
-   revisión».
+4. Lotes: marca reportes y pásalos de estado juntos. Para descargar (CSV para
+   Excel o JSON para app_ingresos) escribe un rango de números de llegada
+   (p. ej. `1-10`, que incluye todas las cédulas con llegada 1 a 10) o descarga
+   todo lo que cumpla el filtro (hasta 5000). Al descargar, los «Pendiente de
+   revisión» pasan a «En revisión».
 5. Auditoría: cada intento de login queda en `public.admin_intentos` (correo,
    IP hasheada, motivo) y cada cambio de estado guarda en
    `reporte_eventos.admin_email` quién lo hizo.
@@ -205,7 +207,12 @@ no salen en este archivo (están en el CSV).
 ```json
 {
   "estudiantes": [
-    { "ci": "28123456", "nombre": "Carlos Mendoza", "correo": "carlos@est.ucab.edu.ve" }
+    {
+      "ci": "28123456",
+      "nombre": "Carlos Mendoza",
+      "correo": "carlos@est.ucab.edu.ve",
+      "perfil": "Alumno"
+    }
   ],
   "reportes": [
     {
@@ -220,8 +227,10 @@ no salen en este archivo (están en el CSV).
 }
 ```
 
-* `estudiantes` trae una sola fila por cédula; si el alumno cambió su nombre o
-  correo entre reportes, queda el del reporte más reciente.
+* `estudiantes` trae una sola fila por cédula; si el alumno cambió su nombre,
+  correo o perfil entre reportes, queda el del reporte más reciente.
+* `perfil` es el tipo de alumno declarado en el formulario: `Alumno`,
+  `Beca trabajo`, `Deportista` o `Colaboradores` (tutores, consejeros...).
 * `tipo_error` va con la etiqueta legible del catálogo (`Error de prerrequisito`,
   `Error de correquisito`, `Reserva cerrada`, `Cruce de horario`,
   `Cambio de horario`, `Otros`).
@@ -242,7 +251,7 @@ no se expone el estado interno del proyecto.
 > `tipo_error_detalle` inexistentes), de tipo (`estado`/`tipo_error` como
 > texto en vez de enum) o de función (`crear_reporte` inexistente), ejecuta
 > `supabase/setup.sql` completo o las migraciones pendientes (la última es
-> `0010_ticket_consultas.sql`).
+> `0012_perfil_alumno.sql`).
 
 ### Comprobaciones en Supabase
 

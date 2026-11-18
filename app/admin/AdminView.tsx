@@ -44,6 +44,22 @@ async function leerRespuesta(respuesta: Response): Promise<RespuestaApi> {
   }
 }
 
+/**
+ * Interpreta el lote de descarga: «1-10», «7» o «10-1». Devuelve el rango
+ * ordenado o `null` si el texto no es un rango válido.
+ */
+function leerRangoLote(valor: string): { desde: number; hasta: number } | null {
+  const coincidencia = /^(\d{1,6})(?:\s*-\s*(\d{1,6}))?$/.exec(valor.trim());
+  if (!coincidencia) return null;
+
+  const primero = Number(coincidencia[1]);
+  const segundo = Number(coincidencia[2] ?? coincidencia[1]);
+
+  if (primero < 1 || segundo < 1) return null;
+
+  return { desde: Math.min(primero, segundo), hasta: Math.max(primero, segundo) };
+}
+
 /** «Pendiente → En revisión» para el historial de cada ticket. */
 function etiquetaEvento(evento: EventoReporte): string {
   return evento.estadoAnterior
@@ -102,6 +118,7 @@ export function AdminView({
   const [seleccion, setSeleccion] = useState<ReadonlySet<string>>(new Set());
   const [contraidos, setContraidos] = useState<ReadonlySet<string>>(new Set());
   const [formato, setFormato] = useState<"csv" | "json">("csv");
+  const [rangoLote, setRangoLote] = useState("");
   const [loteEstado, setLoteEstado] = useState<"" | EstadoReporte>("");
   const [loteNota, setLoteNota] = useState("");
   const [trabajando, setTrabajando] = useState(false);
@@ -194,12 +211,6 @@ export function AdminView({
     });
   }
 
-  const todosMarcados = reportes.length > 0 && seleccion.size === reportes.length;
-
-  function alternarTodos() {
-    setSeleccion(todosMarcados ? new Set() : new Set(reportes.map((r) => r.id)));
-  }
-
   function alternarGrupo(ids: string[]) {
     setSeleccion((previa) => {
       const siguiente = new Set(previa);
@@ -288,9 +299,14 @@ export function AdminView({
     );
   }
 
-  async function descargar(modo: "seleccion" | "filtro") {
+  const rangoLoteValido = leerRangoLote(rangoLote);
+
+  async function descargar(
+    modo:
+      | { tipo: "lote"; desde: number; hasta: number }
+      | { tipo: "filtro" },
+  ) {
     if (trabajando) return;
-    if (modo === "seleccion" && seleccion.size === 0) return;
 
     setTrabajando(true);
     setError(null);
@@ -298,8 +314,13 @@ export function AdminView({
 
     try {
       const cuerpo =
-        modo === "seleccion"
-          ? { accion: "descargar", formato, ids: [...seleccion] }
+        modo.tipo === "lote"
+          ? {
+              accion: "descargar",
+              formato,
+              llegadaDesde: modo.desde,
+              llegadaHasta: modo.hasta,
+            }
           : { accion: "descargar", formato, estado, q: q.trim() };
 
       const respuesta = await fetch("/api/admin/reportes", {
@@ -335,10 +356,13 @@ export function AdminView({
       const marcados = Number(respuesta.headers.get("X-Reportes-Marcados") ?? 0);
       const truncado = respuesta.headers.get("X-Reportes-Truncado") === "1";
 
+      const delLote =
+        modo.tipo === "lote" ? ` del lote ${modo.desde}-${modo.hasta}` : "";
+
       setAviso(
-        `Se descargaron ${descargados} reporte(s)` +
+        `Se descargaron ${descargados} reporte(s)${delLote}` +
           (marcados > 0 ? `; ${marcados} pasaron a «En revisión».` : ".") +
-          (truncado ? " Había más: se descargó el máximo permitido, acota el filtro." : ""),
+          (truncado ? " Había más: se descargó el máximo permitido, acota el lote o el filtro." : ""),
       );
 
       await cargar();
@@ -433,11 +457,15 @@ export function AdminView({
 
       <section aria-label="Acciones por lote"
         className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 shadow-sm">
-        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-          <input type="checkbox" checked={todosMarcados} onChange={alternarTodos}
-            disabled={reportes.length === 0} className="h-5 w-5" />
-          Seleccionar visibles ({seleccion.size})
+        <label htmlFor="rango-lote" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+          Descargar por lote
         </label>
+        <input id="rango-lote" type="text" inputMode="numeric" value={rangoLote}
+          onChange={(e) => setRangoLote(e.target.value)} placeholder="1-10"
+          aria-label="Rango de números de llegada"
+          aria-invalid={rangoLote.trim().length > 0 && !rangoLoteValido}
+          aria-describedby="ayuda-lote"
+          className={`${campo} w-24 text-center font-mono`} />
 
         <select value={formato} onChange={(e) => setFormato(e.target.value as "csv" | "json")}
           aria-label="Formato de descarga" className={campo}>
@@ -445,12 +473,14 @@ export function AdminView({
           <option value="json">JSON (app de ingreso)</option>
         </select>
 
-        <button type="button" disabled={trabajando || seleccion.size === 0}
-          onClick={() => void descargar("seleccion")} className={botonPrimario}>
-          Descargar seleccionados
+        <button type="button" disabled={trabajando || !rangoLoteValido}
+          onClick={() => {
+            if (rangoLoteValido) void descargar({ tipo: "lote", ...rangoLoteValido });
+          }} className={botonPrimario}>
+          Descargar lote
         </button>
         <button type="button" disabled={trabajando || total === 0}
-          onClick={() => void descargar("filtro")} className={botonSecundario}>
+          onClick={() => void descargar({ tipo: "filtro" })} className={botonSecundario}>
           Descargar todos ({total}, según filtro)
         </button>
 
@@ -470,8 +500,14 @@ export function AdminView({
           </button>
         </div>
 
-        <p className="w-full text-xs text-slate-500 dark:text-slate-400">
-          Al descargar, los reportes «Pendiente de revisión» pasan automáticamente a «En revisión».
+        <p id="ayuda-lote" className={`w-full text-xs ${
+          rangoLote.trim() && !rangoLoteValido
+            ? "text-rose-700 dark:text-rose-300"
+            : "text-slate-500 dark:text-slate-400"
+        }`}>
+          {rangoLote.trim() && !rangoLoteValido
+            ? "Escribe un rango válido de números de llegada, por ejemplo 1-10."
+            : "El lote descarga los reportes de las cédulas con número de llegada en el rango (ignora el buscador y el filtro). Al descargar, los «Pendiente de revisión» pasan a «En revisión»."}
         </p>
       </section>
 

@@ -4,13 +4,15 @@ import { useState, type FormEvent } from "react";
 
 import { useReportes } from "@/context/ReportesContext";
 import {
+  PERFILES_ALUMNO,
   TIPOS_ERROR,
+  esPerfilAlumno,
   esTipoError,
   tipoRequiereDetalle,
 } from "@/lib/catalogos";
 import { CONFIG } from "@/lib/config";
 import type { Materia } from "@/lib/materias";
-import type { Reporte, TipoError } from "@/lib/types";
+import type { PerfilAlumno, Reporte, TipoError } from "@/lib/types";
 import {
   CEDULA_MAX_DIGITOS,
   CEDULA_MIN_DIGITOS,
@@ -35,6 +37,7 @@ interface FormState {
   ci: string;
   nombre: string;
   correo: string;
+  perfil: "" | PerfilAlumno;
   /** Código único de la malla (value del select). */
   materia_codigo: string;
   tipo_error: "" | TipoError;
@@ -51,6 +54,7 @@ interface DatosParaOtroReporte {
   ci: string;
   nombre: string;
   correo: string;
+  perfil: PerfilAlumno;
   verificacion: VerificacionAprobada;
 }
 
@@ -58,6 +62,7 @@ const FORMULARIO_INICIAL: FormState = {
   ci: "",
   nombre: "",
   correo: "",
+  perfil: "",
   materia_codigo: "",
   tipo_error: "",
   tipo_error_detalle: "",
@@ -72,6 +77,7 @@ const ETIQUETAS_CAMPO: Record<CampoFormulario, string> = {
   ci: "Cédula",
   nombre: "Nombre",
   correo: "Correo",
+  perfil: "Tipo de alumno",
   materia_codigo: "Materia",
   tipo_error: "Tipo de error",
   tipo_error_detalle: "Especifica el error",
@@ -224,6 +230,10 @@ export function FormularioTradicional({
       nuevosErrores.correo = "Verifica tu correo antes de enviar el reporte.";
     }
 
+    if (!esPerfilAlumno(formulario.perfil)) {
+      nuevosErrores.perfil = "Selecciona el tipo de alumno.";
+    }
+
     if (!materias.some((materia) => materia.codigo === formulario.materia_codigo)) {
       nuevosErrores.materia_codigo = "Selecciona una materia válida de la malla.";
     }
@@ -274,7 +284,13 @@ export function FormularioTradicional({
 
     setMostrarResumen(false);
 
-    if (!esTipoError(formulario.tipo_error) || !verificacion) return;
+    if (
+      !esTipoError(formulario.tipo_error) ||
+      !esPerfilAlumno(formulario.perfil) ||
+      !verificacion
+    ) {
+      return;
+    }
 
     setEnviando(true);
     setErrorEnvio(null);
@@ -284,6 +300,7 @@ export function FormularioTradicional({
         ci: formulario.ci.trim(),
         nombre: formulario.nombre.trim(),
         correo: formulario.correo.trim().toLowerCase(),
+        perfil: formulario.perfil,
         materia_codigo: formulario.materia_codigo,
         tipo_error: formulario.tipo_error,
         tipo_error_detalle: tipoRequiereDetalle(formulario.tipo_error)
@@ -307,6 +324,7 @@ export function FormularioTradicional({
         ci: formulario.ci.trim(),
         nombre: formulario.nombre.trim(),
         correo: formulario.correo.trim().toLowerCase(),
+        perfil: formulario.perfil,
         verificacion,
       });
       setFormulario(FORMULARIO_INICIAL);
@@ -341,6 +359,7 @@ export function FormularioTradicional({
         ci: ultimoEnvio.ci,
         nombre: ultimoEnvio.nombre,
         correo: ultimoEnvio.correo,
+        perfil: ultimoEnvio.perfil,
       });
       setVerificacion(
         verificacionVigente(ultimoEnvio.verificacion)
@@ -501,51 +520,86 @@ export function FormularioTradicional({
             </div>
           </div>
 
-          <div>
-            <label
-              htmlFor="correo"
-              className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
-            >
-              Correo <Requerido />
-            </label>
-            <input
-              id="correo"
-              name="correo"
-              type="email"
-              autoComplete="email"
-              autoCapitalize="none"
-              spellCheck={false}
-              placeholder="nombre@est.ucab.edu.ve"
-              value={formulario.correo}
-              onChange={(event) => actualizarCorreo(event.target.value)}
-              required
-              aria-invalid={Boolean(errores.correo)}
-              aria-describedby={errores.correo ? "correo-error" : undefined}
-              className={claseControl(Boolean(errores.correo))}
-            />
-            <ErrorCampo id="correo-error" mensaje={errores.correo} />
-            {esCorreoValido(formulario.correo) && !esCedulaValida(formulario.ci) && (
-              <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                Escribe primero tu cédula para poder verificar el correo.
-              </p>
-            )}
-
-            {esCorreoValido(formulario.correo) &&
-              esCorreoInstitucional(formulario.correo) &&
-              esCedulaValida(formulario.ci) && (
-              <VerificacionCorreo
-                key={`${formulario.correo}|${formulario.ci}`}
-                correo={formulario.correo}
-                ci={formulario.ci.trim()}
-                verificadaInicialmente={
-                  verificacion?.correo ===
-                    formulario.correo.trim().toLowerCase() &&
-                  verificacion.ci === formulario.ci.trim()
-                }
-                onVerifiedChange={manejarVerificacion}
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="correo"
+                className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
+              >
+                Correo <Requerido />
+              </label>
+              <input
+                id="correo"
+                name="correo"
+                type="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="nombre@est.ucab.edu.ve"
+                value={formulario.correo}
+                onChange={(event) => actualizarCorreo(event.target.value)}
+                required
+                aria-invalid={Boolean(errores.correo)}
+                aria-describedby={errores.correo ? "correo-error" : undefined}
+                className={claseControl(Boolean(errores.correo))}
               />
-            )}
+              <ErrorCampo id="correo-error" mensaje={errores.correo} />
+              {esCorreoValido(formulario.correo) && !esCedulaValida(formulario.ci) && (
+                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  Escribe primero tu cédula para poder verificar el correo.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                htmlFor="perfil"
+                className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
+              >
+                Tipo de alumno <Requerido />
+              </label>
+              <select
+                id="perfil"
+                name="perfil"
+                value={formulario.perfil}
+                onChange={(event) => {
+                  const valor = event.target.value;
+                  actualizar(
+                    "perfil",
+                    valor === "" ? "" : (valor as PerfilAlumno),
+                  );
+                }}
+                required
+                aria-invalid={Boolean(errores.perfil)}
+                aria-describedby={errores.perfil ? "perfil-error" : undefined}
+                className={claseControl(Boolean(errores.perfil))}
+              >
+                <option value="">Selecciona tu tipo de alumno</option>
+                {PERFILES_ALUMNO.map((opcion) => (
+                  <option key={opcion.value} value={opcion.value}>
+                    {opcion.label}
+                  </option>
+                ))}
+              </select>
+              <ErrorCampo id="perfil-error" mensaje={errores.perfil} />
+            </div>
           </div>
+
+          {esCorreoValido(formulario.correo) &&
+            esCorreoInstitucional(formulario.correo) &&
+            esCedulaValida(formulario.ci) && (
+            <VerificacionCorreo
+              key={`${formulario.correo}|${formulario.ci}`}
+              correo={formulario.correo}
+              ci={formulario.ci.trim()}
+              verificadaInicialmente={
+                verificacion?.correo ===
+                  formulario.correo.trim().toLowerCase() &&
+                verificacion.ci === formulario.ci.trim()
+              }
+              onVerifiedChange={manejarVerificacion}
+            />
+          )}
 
           <div className="grid gap-5 sm:grid-cols-2">
             <div>

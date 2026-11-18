@@ -32,6 +32,8 @@ const LIMITE_DESCARGA = 5_000;
 const TAMANO_PAGINA = 1_000;
 const MAX_IDS = 1_000;
 const TAMANO_LOTE_RPC = 500;
+/** Cédulas por consulta al descargar un lote (evita URLs demasiado largas). */
+const CIS_POR_CONSULTA = 200;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -39,6 +41,8 @@ interface Filtros {
   estado: string;
   q: string;
   ids?: string[];
+  /** Cédulas incluidas en el lote de descarga. */
+  cis?: string[];
 }
 
 function filtrosDeTexto(estado: unknown, q: unknown): Pick<Filtros, "estado" | "q"> {
@@ -90,6 +94,43 @@ async function cargarNumerosLlegada(
   return { numeros, disponible: true };
 }
 
+/**
+ * Cédulas cuyo número de llegada cae en el rango (inclusive). Se pagina
+ * porque PostgREST devuelve como máximo 1000 filas por petición.
+ */
+async function cargarCisPorLlegada(
+  desde: number,
+  hasta: number,
+): Promise<{ cis: string[]; disponible: boolean }> {
+  const cis: string[] = [];
+
+  for (let inicio = 0; inicio < LIMITE_DESCARGA; inicio += TAMANO_PAGINA) {
+    const { data, error } = await obtenerSupabaseAdmin()
+      .from("reportes_con_llegada")
+      .select("ci")
+      .gte("numero_llegada", desde)
+      .lte("numero_llegada", hasta)
+      .order("numero_llegada", { ascending: true })
+      .range(inicio, inicio + TAMANO_PAGINA - 1);
+
+    if (error) {
+      if (faltaVistaLlegada(error)) {
+        console.warn(
+          "[api/admin/reportes] falta la migración 0011 (reportes_con_llegada); no se puede descargar por lote.",
+        );
+        return { cis, disponible: false };
+      }
+      throw error;
+    }
+
+    cis.push(...(data ?? []).map((fila) => fila.ci));
+
+    if ((data?.length ?? 0) < TAMANO_PAGINA) break;
+  }
+
+  return { cis: [...new Set(cis)], disponible: true };
+}
+
 /** Misma consulta para la lista y la descarga: los filtros nunca divergen. */
 function consultaReportes(filtros: Filtros, desde: number, hasta: number) {
   let consulta = obtenerSupabaseAdmin()
@@ -100,6 +141,7 @@ function consultaReportes(filtros: Filtros, desde: number, hasta: number) {
     .range(desde, hasta);
 
   if (filtros.ids) consulta = consulta.in("id", filtros.ids);
+  if (filtros.cis) consulta = consulta.in("ci", filtros.cis);
   if (esEstadoReporte(filtros.estado)) consulta = consulta.eq("estado", filtros.estado);
 
   const seguro = filtros.q.replace(/[^A-Za-z0-9-]/g, "");
@@ -150,6 +192,94 @@ async function cambiarEstadoPorLotes(
   return cambiados;
 }
 
+function leerEntero(valor: unknown): number | null {
+  return typeof valor === "number" && Number.isSafeInteger(valor) && valor > 0
+    ? valor
+    : null;
+}
+
+function trocear<T>(valores: T[], tamano: number): T[][] {
+  const bloques: T[][] = [];
+
+  for (let inicio = 0; inicio < valores.length; inicio += tamano) {
+    bloques.push(valores.slice(inicio, inicio + tamano));
+  }
+
+  return bloques;
+}
+
+/**
+ * Reúne los reportes de una descarga por tandas de 1000 (tope de PostgREST).
+ * Si el lote abarca muchas cédulas, se consultan en bloques pequeños y se
+ * deduplican por id antes de devolverlos en orden cronológico.
+ */
+async function recolectarParaDescarga(
+  filtros: Filtros,
+): Promise<{ reportes: Reporte[]; hayMas: boolean }> {
+  const reportes: Reporte[] = [];
+  const vistos = new Set<string>();
+  const bloques: (string[] | undefined)[] =
+    filtros.cis && filtros.cis.length > CIS_POR_CONSULTA
+      ? trocear(filtros.cis, CIS_POR_CONSULTA)
+      : [filtros.cis];
+
+  let totalCoincidencias = 0;
+  let hayMas = false;
+
+  for (const bloque of bloques) {
+    if (reportes.length >= LIMITE_DESCARGA) {
+      hayMas = true;
+      break;
+    }
+
+    let contado = false;
+
+    for (let desde = 0; desde < LIMITE_DESCARGA; desde += TAMANO_PAGINA) {
+      const { data, count, error } = await consultaReportes(
+        { ...filtros, cis: bloque },
+        desde,
+        desde + TAMANO_PAGINA - 1,
+      );
+
+      if (error) throw error;
+
+      if (!contado) {
+        totalCoincidencias += count ?? 0;
+        contado = true;
+      }
+
+      for (const fila of data ?? []) {
+        const reporte = mapearReporte(fila);
+        if (vistos.has(reporte.id)) continue;
+
+        vistos.add(reporte.id);
+        reportes.push(reporte);
+
+        if (reportes.length >= LIMITE_DESCARGA) break;
+      }
+
+      if (reportes.length >= LIMITE_DESCARGA) break;
+      if ((data?.length ?? 0) < TAMANO_PAGINA) break;
+      if (desde + TAMANO_PAGINA >= (count ?? 0)) break;
+    }
+  }
+
+  if (
+    reportes.length >= LIMITE_DESCARGA &&
+    totalCoincidencias > LIMITE_DESCARGA
+  ) {
+    hayMas = true;
+  }
+
+  // Orden estable para el CSV y para que el JSON elija el dato más reciente
+  // de cada cédula. Los bloques de cédulas son disjuntos.
+  reportes.sort(
+    (a, b) => b.creadoEn.localeCompare(a.creadoEn) || a.id.localeCompare(b.id),
+  );
+
+  return { reportes, hayMas };
+}
+
 export async function GET(request: Request) {
   try {
     const admin = await obtenerAdmin(request);
@@ -198,9 +328,12 @@ export async function GET(request: Request) {
 /**
  * Acciones por lote:
  *  - { accion: "estado", ids, estado, nota? }
- *  - { accion: "descargar", formato: "csv" | "json", ids? | estado?, q? }
+ *  - { accion: "descargar", formato: "csv" | "json",
+ *      ids? | estado?, q? | llegadaDesde, llegadaHasta }
  *    El formato "json" produce el datos.json de app_ingresos
  *    ({ estudiantes, reportes }); "csv" es la hoja completa para Excel.
+ *    El lote por llegada descarga todas las cédulas cuyo número de llegada
+ *    cae en el rango e ignora el buscador y el filtro de estado.
  *    Al descargar, los «pendiente» pasan a «en-revision» (queda en el historial).
  */
 export async function POST(request: Request) {
@@ -232,29 +365,51 @@ export async function POST(request: Request) {
         return respuestaError("validacion", "Selección inválida.", 422);
       }
 
-      const filtros: Filtros = {
-        ...filtrosDeTexto(cuerpo?.estado, cuerpo?.q),
-        ids,
-      };
+      const porLote =
+        cuerpo?.llegadaDesde !== undefined || cuerpo?.llegadaHasta !== undefined;
+      const llegadaDesde = porLote ? leerEntero(cuerpo?.llegadaDesde) : null;
+      const llegadaHasta = porLote ? leerEntero(cuerpo?.llegadaHasta) : null;
 
-      const reportes: Reporte[] = [];
-      let hayMas = false;
-
-      for (let desde = 0; desde < LIMITE_DESCARGA; desde += TAMANO_PAGINA) {
-        const { data, count, error } = await consultaReportes(
-          filtros,
-          desde,
-          desde + TAMANO_PAGINA - 1,
-        );
-
-        if (error) throw error;
-
-        reportes.push(...(data ?? []).map((fila) => mapearReporte(fila)));
-
-        if ((data?.length ?? 0) < TAMANO_PAGINA) break;
-        if (desde + TAMANO_PAGINA >= (count ?? 0)) break;
-        if (desde + TAMANO_PAGINA >= LIMITE_DESCARGA) hayMas = true;
+      if (
+        porLote &&
+        (llegadaDesde === null ||
+          llegadaHasta === null ||
+          llegadaDesde > llegadaHasta)
+      ) {
+        return respuestaError("validacion", "Rango de lote inválido.", 422);
       }
+
+      let cis: string[] | undefined;
+
+      if (llegadaDesde !== null && llegadaHasta !== null) {
+        const lote = await cargarCisPorLlegada(llegadaDesde, llegadaHasta);
+
+        if (!lote.disponible) {
+          return respuestaError(
+            "interno",
+            "No se puede descargar por lote: falta la migración 0011 (números de llegada). Ejecútala en Supabase.",
+            500,
+          );
+        }
+
+        if (lote.cis.length === 0) {
+          return respuestaError(
+            "no_encontrado",
+            "No hay cédulas en ese rango de llegada.",
+            404,
+          );
+        }
+
+        cis = lote.cis;
+      }
+
+      // El lote ignora el buscador y el filtro de estado: «1-10» siempre
+      // significa los reportes de las cédulas con llegada 1 a 10.
+      const filtros: Filtros = porLote
+        ? { estado: "", q: "", cis }
+        : { ...filtrosDeTexto(cuerpo?.estado, cuerpo?.q), ids };
+
+      const { reportes, hayMas } = await recolectarParaDescarga(filtros);
 
       if (reportes.length === 0) {
         return respuestaError("no_encontrado", "No hay reportes para descargar.", 404);

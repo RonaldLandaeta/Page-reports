@@ -3,22 +3,29 @@ import "server-only";
 import { randomInt } from "node:crypto";
 
 import type { CodigoErrorApi } from "@/lib/api/respuestas";
+import { esPerfilAlumno } from "@/lib/catalogos";
 import { CONFIG } from "@/lib/config";
 import { obtenerSupabaseAdmin } from "@/lib/supabase/admin";
 import type { FilaEventoDb, FilaReporteDb } from "@/lib/supabase/types";
-import type { EventoReporte, Reporte, TipoError } from "@/lib/types";
+import type {
+  EventoReporte,
+  PerfilAlumno,
+  Reporte,
+  TipoError,
+} from "@/lib/types";
 
 export type { FilaReporteDb };
 
 /** Columnas que puede ver un administrador (nunca se envían secretos). */
 export const CAMPOS_PUBLICOS =
-  "id,ticket,ci,nombre,correo,nrc,materia_codigo,materia_nombre,tipo_error,tipo_error_detalle,motivo,estado,creado_en,actualizado_en" as const;
+  "id,ticket,ci,nombre,correo,perfil,nrc,materia_codigo,materia_nombre,tipo_error,tipo_error_detalle,motivo,estado,creado_en,actualizado_en" as const;
 
 /** Datos que ya vienen validados desde la API y se insertan en Postgres. */
 export type ReporteNuevoDb = {
   ci: string;
   nombre: string;
   correo: string;
+  perfil: PerfilAlumno;
   nrc: string;
   materia_codigo: string;
   materia_nombre: string;
@@ -39,6 +46,8 @@ export function mapearReporte(fila: FilaReporteDb): Reporte {
     ci: fila.ci,
     nombre: fila.nombre,
     correo: fila.correo,
+    // Datos antiguos o una escritura manual podrían no cumplir el catálogo.
+    perfil: esPerfilAlumno(fila.perfil) ? fila.perfil : "Alumno",
     nrc: fila.nrc,
     materiaCodigo: fila.materia_codigo,
     materiaNombre: fila.materia_nombre,
@@ -161,6 +170,7 @@ export async function crearReporteEnDb(
     p_ci: input.ci,
     p_nombre: input.nombre,
     p_correo: input.correo,
+    p_perfil: input.perfil,
     p_nrc: input.nrc,
     p_materia_codigo: input.materia_codigo,
     p_materia_nombre: input.materia_nombre,
@@ -385,6 +395,7 @@ async function crearReporteDeRespaldo(
         ci: input.ci,
         nombre: input.nombre,
         correo: input.correo,
+        perfil: input.perfil,
         nrc: input.nrc,
         materia_codigo: input.materia_codigo,
         materia_nombre: input.materia_nombre,

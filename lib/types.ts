@@ -32,8 +32,23 @@ export type TipoError =
 
 export type EstadoReporte = "pendiente" | "en-revision" | "resuelto";
 
+/**
+ * Tipo de alumno declarado al reportar. Se guarda tal cual en la base y se
+ * exporta como `perfil` en el datos.json de app_ingresos.
+ */
+export type PerfilAlumno =
+  | "Alumno"
+  | "Beca trabajo"
+  | "Deportista"
+  | "Colaboradores";
+
 export interface TipoErrorOpcion {
   value: TipoError;
+  label: string;
+}
+
+export interface PerfilAlumnoOpcion {
+  value: PerfilAlumno;
   label: string;
 }
 
@@ -42,6 +57,11 @@ export interface ReporteInput {
   ci: string;
   nombre: string;
   correo: string;
+  /**
+   * Tipo de alumno. El formulario lo exige; los canales que no lo preguntan
+   * (chatbot) pueden omitirlo y el servidor asume «Alumno».
+   */
+  perfil?: PerfilAlumno;
   /** Código único de la malla local (ej. "FING-02002"). */
   materia_codigo: string;
   tipo_error: TipoError;
@@ -65,6 +85,8 @@ export interface Reporte {
   ci: string;
   nombre: string;
   correo: string;
+  /** Tipo de alumno declarado al reportar. */
+  perfil: PerfilAlumno;
   /** NRC visible (nroCurso). Puede repetirse entre carreras. */
   nrc: string;
   /** Código único de la malla local. */

@@ -1,8 +1,25 @@
 import type {
   EstadoReporte,
+  PerfilAlumno,
+  PerfilAlumnoOpcion,
   TipoError,
   TipoErrorOpcion,
 } from "./types";
+
+/** Tipos de alumno que puede declarar quien reporta. */
+export const PERFILES_ALUMNO: PerfilAlumnoOpcion[] = [
+  { value: "Alumno", label: "Alumno" },
+  { value: "Beca trabajo", label: "Beca trabajo" },
+  { value: "Deportista", label: "Deportista" },
+  {
+    value: "Colaboradores",
+    label: "Colaboradores (Tutores, Consejeros...)",
+  },
+];
+
+export function esPerfilAlumno(value: string): value is PerfilAlumno {
+  return PERFILES_ALUMNO.some((opcion) => opcion.value === value);
+}
 
 export const TIPOS_ERROR: TipoErrorOpcion[] = [
   { value: "error-prerrequisito", label: "Error de prerrequisito" },

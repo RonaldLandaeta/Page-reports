@@ -1,4 +1,4 @@
-import type { Reporte, TipoError } from "@/lib/types";
+import type { PerfilAlumno, Reporte, TipoError } from "@/lib/types";
 
 /**
  * Fila que se imprime en la consola JSON de desarrollo. No se envía a la API:
@@ -126,6 +126,7 @@ export interface EstudianteIngreso {
   ci: string;
   nombre: string;
   correo: string;
+  perfil: PerfilAlumno;
 }
 
 /**
@@ -173,6 +174,7 @@ export function reportesADatosIngreso(
         ci,
         nombre: r.nombre.trim(),
         correo: r.correo.trim(),
+        perfil: r.perfil,
       });
     }
 
