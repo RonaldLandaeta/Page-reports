@@ -58,7 +58,7 @@ Malla curricular ── vive en el repositorio (lib/materias), nunca en Supabase
 - **Reglas de negocio en el servidor**:
   - Duplicado con la misma cédula + `materia_codigo` + tipo de error en 24
     horas (así `FING-02002` y `TELE-02002` son reportes distintos).
-  - Máximo 5 reportes por cédula por día calendario (`America/Caracas`).
+  - Máximo 10 reportes por cédula por día calendario (`America/Caracas`).
 - **Ticket único** `TK-XXXXXXX` (7 dígitos) generado por la API.
 - **Consulta protegida** por ticket + cédula, sin revelar cuál dato falló.
 - **Correo de confirmación** con el ticket (best-effort: si falla, el reporte
@@ -251,7 +251,7 @@ no se expone el estado interno del proyecto.
 > `tipo_error_detalle` inexistentes), de tipo (`estado`/`tipo_error` como
 > texto en vez de enum) o de función (`crear_reporte` inexistente), ejecuta
 > `supabase/setup.sql` completo o las migraciones pendientes (la última es
-> `0012_perfil_alumno.sql`).
+> `0013_limite_diario.sql`).
 
 ### Comprobaciones en Supabase
 

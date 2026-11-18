@@ -1,5 +1,5 @@
 export const CONFIG = {
-  maxReportesPorDia: 5,
+  maxReportesPorDia: 10,
   ventanaDuplicadosHoras: 24,
   /** Minutos que vive un código de 6 dígitos. */
   duracionCodigoVerificacionMinutos: 10,
