@@ -375,6 +375,39 @@ async function aplicar(db, archivos) {
     "totp_credenciales guarda una sola credencial estudiantil activa",
   );
 
+  // El mismo mecanismo sirve para que el estudiante reinicie su app si perdió
+  // el teléfono: invalida la credencial anterior y permite enrolar otra.
+  const reinicio = await db.query(`
+    select public.generar_codigo_enrolamiento(
+      '12345678', 'hash-reinicio', now() + interval '1 day',
+      'admin@ucab.edu.ve'
+    ) as id
+  `);
+  afirmar(
+    Boolean(reinicio.rows[0].id),
+    "generar_codigo_enrolamiento sirve como reinicio",
+  );
+
+  const trasReinicio = await db.query(`
+    select count(*)::int as total
+      from public.totp_credenciales
+     where tipo = 'estudiante' and sujeto = '12345678'
+  `);
+  afirmar(
+    trasReinicio.rows[0].total === 0,
+    "el reinicio borra la app anterior del estudiante",
+  );
+
+  const reenroladoTrasReinicio = await db.query(`
+    select public.enrolar_estudiante(
+      '12345678', 'hash-reinicio', 'v1.reinicio'
+    ) as r
+  `);
+  afirmar(
+    reenroladoTrasReinicio.rows[0].r.ok === true,
+    "tras el reinicio se puede enrolar una app nueva",
+  );
+
   // 0011: número de llegada por cédula sobre todo el histórico.
   const llegadas = await db.query(`
     select ci,

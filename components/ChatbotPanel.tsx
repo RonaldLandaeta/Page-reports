@@ -104,7 +104,7 @@ const PREGUNTAS: Record<Paso, string> = {
   enrolamiento:
     "Escribe el código de enrolamiento que te entregó un administrador. Si no tienes uno, pídelo antes de continuar.",
   verificacion:
-    "Escribe el código de 6 dígitos que muestra tu app de autenticación.",
+    "Escribe el código de 6 dígitos que muestra tu app de autenticación. Si perdiste tu teléfono, escribe «reiniciar».",
   nrc: "¿En qué materia está el problema? Escribe el NRC, el código o el nombre, o elige una de la lista.",
   tipo_error: "¿Qué tipo de problema es?",
   detalle: `Especifica el error (máximo ${DETALLE_ERROR_MAX} caracteres).`,
@@ -340,6 +340,27 @@ async function procesar(
         return bloqueo(
           "Perdí los datos de la verificación. Empecemos de nuevo.",
         );
+      }
+
+      // Si perdió el teléfono, se le guía al mismo paso de código de
+      // enrolamiento: un administrador debe autorizar el reinicio.
+      if (
+        !datos.enrolamientoPendiente &&
+        /\b(reiniciar|reinicio|perdi|perdido|sin telefono|sin celular|no tengo (el )?(telefono|celular))\b/.test(
+          normalizarTexto(texto),
+        )
+      ) {
+        datos.enrolamientoPendiente = false;
+
+        return {
+          mensajes: [
+            {
+              texto:
+                "Para reiniciar tu app, un administrador debe generarte un código de reinicio para tu cédula. Cuando lo tengas, escríbelo aquí.",
+            },
+          ],
+          paso: "enrolamiento",
+        };
       }
 
       if (!/^\d{6}$/.test(texto.trim())) {

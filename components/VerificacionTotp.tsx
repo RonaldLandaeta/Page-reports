@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 
 import { ErrorApi, postJson } from "@/lib/api-cliente";
 import { CONFIG } from "@/lib/config";
@@ -28,7 +28,8 @@ type Vista =
   | "sin_credencial"
   | "pendiente"
   | "escanear"
-  | "activo";
+  | "activo"
+  | "reiniciar";
 
 interface DatosQr {
   qr: string;
@@ -87,8 +88,7 @@ export function VerificacionTotp({
     };
   }, [ci, verificadaInicialmente]);
 
-  async function enrolar(event: FormEvent) {
-    event.preventDefault();
+  async function enrolar() {
     if (ocupado) return;
 
     setOcupado(true);
@@ -115,9 +115,7 @@ export function VerificacionTotp({
     }
   }
 
-  async function confirmar(event: FormEvent) {
-    event.preventDefault();
-
+  async function confirmar() {
     if (!/^\d{6}$/.test(codigo)) {
       setError("Escribe los 6 dígitos que muestra tu app.");
       return;
@@ -151,6 +149,19 @@ export function VerificacionTotp({
     } finally {
       setOcupado(false);
     }
+  }
+
+  /**
+   * Enter envía el paso actual sin disparar el formulario del reporte que
+   * envuelve este panel (los formularios anidados no son válidos en HTML).
+   */
+  function alPresionarEnter(accion: () => void) {
+    return (evento: KeyboardEvent<HTMLInputElement>) => {
+      if (evento.key !== "Enter") return;
+      evento.preventDefault();
+      evento.stopPropagation();
+      accion();
+    };
   }
 
   async function copiarSecreto() {
@@ -199,19 +210,25 @@ export function VerificacionTotp({
     );
   }
 
-  if (vista === "sin_credencial" || vista === "pendiente") {
+  if (
+    vista === "sin_credencial" ||
+    vista === "pendiente" ||
+    vista === "reiniciar"
+  ) {
     return (
-      <form
-        onSubmit={enrolar}
-        className="mt-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3"
-      >
-        <p className="flex items-start gap-1.5 text-xs leading-5 text-slate-600 dark:text-slate-400">
-          <ShieldIcon className="mt-0.5 size-3.5 shrink-0 text-slate-500 dark:text-slate-400" />
-          <span>
-            {vista === "pendiente"
-              ? "Tu enrolamiento quedó a medias. Vuelve a escribir el código que te entregó el administrador."
+      <div className="mt-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3">
+        <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200">
+          <ShieldIcon className="size-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+          {vista === "reiniciar"
+            ? "Reiniciar mi app de autenticación"
+            : "Verifica tu identidad"}
+        </p>
+        <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">
+          {vista === "pendiente"
+            ? "Tu enrolamiento quedó a medias. Vuelve a escribir el código que te entregó el administrador."
+            : vista === "reiniciar"
+              ? "Por seguridad, un administrador debe autorizar el reinicio. Pídele un código de reinicio para tu cédula y escríbelo aquí."
               : "Para comprobar tu identidad necesitas una app de autenticación. Pide a un administrador un código de enrolamiento de un solo uso."}
-          </span>
         </p>
 
         <div className="mt-2.5 flex gap-2">
@@ -221,8 +238,16 @@ export function VerificacionTotp({
             spellCheck={false}
             autoCapitalize="characters"
             maxLength={14}
-            placeholder="Código de enrolamiento"
-            aria-label="Código de enrolamiento"
+            placeholder={
+              vista === "reiniciar"
+                ? "Código de reinicio"
+                : "Código de enrolamiento"
+            }
+            aria-label={
+              vista === "reiniciar"
+                ? "Código de reinicio"
+                : "Código de enrolamiento"
+            }
             aria-invalid={Boolean(error)}
             value={codigoEnrolamiento}
             onChange={(evento) => {
@@ -231,10 +256,16 @@ export function VerificacionTotp({
               );
               if (error) setError(null);
             }}
+            onKeyDown={alPresionarEnter(() => void enrolar())}
             disabled={ocupado}
             className={`${control} font-mono tracking-widest`}
           />
-          <button type="submit" disabled={ocupado} className={boton}>
+          <button
+            type="button"
+            onClick={() => void enrolar()}
+            disabled={ocupado}
+            className={boton}
+          >
             {ocupado ? "Comprobando..." : "Continuar"}
           </button>
         </div>
@@ -244,7 +275,22 @@ export function VerificacionTotp({
             {error}
           </p>
         )}
-      </form>
+
+        {vista === "reiniciar" && (
+          <button
+            type="button"
+            onClick={() => {
+              setVista("activo");
+              setCodigoEnrolamiento("");
+              setError(null);
+            }}
+            disabled={ocupado}
+            className="mt-2 text-xs font-semibold text-slate-500 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-400"
+          >
+            Cancelar
+          </button>
+        )}
+      </div>
     );
   }
 
@@ -293,7 +339,7 @@ export function VerificacionTotp({
           </div>
         </div>
 
-        <form onSubmit={confirmar} className="mt-3">
+        <div className="mt-3">
           <div className="flex gap-2">
             <input
               type="text"
@@ -308,10 +354,16 @@ export function VerificacionTotp({
                 setCodigo(evento.target.value.replace(/\D/g, "").slice(0, 6));
                 if (error) setError(null);
               }}
+              onKeyDown={alPresionarEnter(() => void confirmar())}
               disabled={ocupado}
               className={`${control} tracking-widest`}
             />
-            <button type="submit" disabled={ocupado} className={boton}>
+            <button
+              type="button"
+              onClick={() => void confirmar()}
+              disabled={ocupado}
+              className={boton}
+            >
               {ocupado ? "Confirmando..." : "Confirmar"}
             </button>
           </div>
@@ -321,26 +373,24 @@ export function VerificacionTotp({
               {error}
             </p>
           )}
-        </form>
+        </div>
       </div>
     );
   }
 
   // Credencial ya activa: solo se pide el código del momento.
   return (
-    <form
-      onSubmit={confirmar}
-      className="mt-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3"
-    >
-      <p className="flex items-start gap-1.5 text-xs leading-5 text-slate-600 dark:text-slate-400">
-        <ShieldIcon className="mt-0.5 size-3.5 shrink-0 text-slate-500 dark:text-slate-400" />
-        <span>
-          Abre tu app de autenticación y escribe el código de 6 dígitos para{" "}
-          <span className="font-semibold text-slate-800 dark:text-slate-200">
-            la cédula {ci}
-          </span>
-          .
+    <div className="mt-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3">
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200">
+        <ShieldIcon className="size-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+        Verifica tu identidad
+      </p>
+      <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">
+        Abre tu app de autenticación y escribe el código de 6 dígitos para{" "}
+        <span className="font-semibold text-slate-800 dark:text-slate-200">
+          la cédula {ci}
         </span>
+        .
       </p>
 
       <div className="mt-2.5 flex gap-2">
@@ -357,10 +407,16 @@ export function VerificacionTotp({
             setCodigo(evento.target.value.replace(/\D/g, "").slice(0, 6));
             if (error) setError(null);
           }}
+          onKeyDown={alPresionarEnter(() => void confirmar())}
           disabled={ocupado}
           className={`${control} tracking-widest`}
         />
-        <button type="submit" disabled={ocupado} className={boton}>
+        <button
+          type="button"
+          onClick={() => void confirmar()}
+          disabled={ocupado}
+          className={boton}
+        >
           {ocupado ? "Validando..." : "Verificar"}
         </button>
       </div>
@@ -371,9 +427,24 @@ export function VerificacionTotp({
         </p>
       )}
 
-      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-        ¿Cambiaste de teléfono? Pide a un administrador que reinicie tu app.
-      </p>
-    </form>
+      <div className="mt-3 border-t border-slate-200 pt-2 dark:border-slate-700">
+        <button
+          type="button"
+          onClick={() => {
+            setVista("reiniciar");
+            setCodigoEnrolamiento("");
+            setError(null);
+          }}
+          disabled={ocupado}
+          className="text-xs font-semibold text-indigo-600 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-indigo-400"
+        >
+          ¿Perdiste tu teléfono? Reiniciar mi app
+        </button>
+        <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+          Un administrador debe darte un código de reinicio. Tu app anterior
+          dejará de funcionar.
+        </p>
+      </div>
+    </div>
   );
 }

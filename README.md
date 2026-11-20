@@ -58,7 +58,9 @@ Malla curricular ── vive en el repositorio (lib/materias), nunca en Supabase
 - **Verificación con app de autenticación (TOTP)**. Un administrador genera un
   código de enrolamiento de un solo uso para la cédula; el estudiante lo canjea,
   escanea el QR y confirma con el primer código de 6 dígitos. Después solo
-  necesita el código de su app para reportar.
+  necesita el código de su app para reportar. Si pierde el teléfono, el panel
+  ofrece **«Reiniciar mi app»**: un administrador genera un código de reinicio
+  (que invalida la app anterior) y el estudiante vincula una nueva.
 - **Reglas de negocio en el servidor**:
   - Duplicado con la misma cédula + `materia_codigo` + tipo de error en 24
     horas (así `FING-02002` y `TELE-02002` son reportes distintos).

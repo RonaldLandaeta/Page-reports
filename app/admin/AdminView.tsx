@@ -795,7 +795,7 @@ function PanelEnrolamientoEstudiantes({
         aria-expanded={abierto}
         className="flex w-full items-center justify-between rounded-lg text-left text-sm font-semibold text-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-200"
       >
-        Códigos de enrolamiento para estudiantes
+        Códigos de enrolamiento y reinicio para estudiantes
         <span aria-hidden="true">{abierto ? "−" : "+"}</span>
       </button>
 
@@ -803,8 +803,8 @@ function PanelEnrolamientoEstudiantes({
         <div className="mt-4 space-y-3">
           <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
             Genera un código de un solo uso para que un estudiante vincule su app
-            de autenticación. También sirve para reiniciar la app si cambió de
-            teléfono. El código anterior de esa cédula queda invalidado.
+            de autenticación. También sirve para reiniciarla si cambió de teléfono
+            o lo perdió: la app anterior de esa cédula queda invalidada.
           </p>
 
           <form onSubmit={generar} className="flex flex-wrap items-end gap-3">
