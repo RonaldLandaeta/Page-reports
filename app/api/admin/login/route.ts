@@ -1,8 +1,15 @@
-import { NextResponse } from "next/server";
-
-import { autenticarAdmin, iniciarSesionAdmin } from "@/lib/admin/sesion";
+import {
+  autenticarAdmin,
+  crearTokenPreAuth,
+} from "@/lib/admin/sesion";
+import { estadoTotpAdmin } from "@/lib/admin/totp";
 import { hashIp, ipDelCliente } from "@/lib/api/ip";
-import { leerCuerpo, respuestaError, texto } from "@/lib/api/respuestas";
+import {
+  leerCuerpo,
+  respuestaError,
+  respuestaOk,
+  texto,
+} from "@/lib/api/respuestas";
 import {
   consultasBloqueadas,
   intentosAdminPorCorreoBloqueados,
@@ -63,14 +70,26 @@ export async function POST(request: Request) {
       return respuestaError("verificacion", MENSAJE, 401);
     }
 
-    await registrarIntentoAdmin({ correo, ipHash, exito: true, motivo: "ok" });
+    await registrarIntentoAdmin({
+      correo,
+      ipHash,
+      exito: false,
+      motivo: "mfa_requerido",
+    });
 
-    const response = NextResponse.json(
-      { ok: true },
-      { headers: { "Cache-Control": "no-store" } },
-    );
-    iniciarSesionAdmin(response, resultado.admin);
-    return response;
+    const estado = await estadoTotpAdmin(resultado.admin.userId);
+    const requiereTotp = estado === "activo";
+
+    // La cookie de sesión NO se crea aquí: primero hay que superar el segundo
+    // factor. El token previo solo autoriza los endpoints de TOTP.
+    return respuestaOk({
+      requiereTotp,
+      requiereEnrolamiento: !requiereTotp,
+      tokenPreAuth: crearTokenPreAuth(
+        resultado.admin,
+        requiereTotp ? "totp" : "enrolar",
+      ),
+    });
   } catch (error) {
     console.error("[api/admin/login]", error);
     return respuestaError("interno", "No pudimos iniciar sesión.", 500);

@@ -297,6 +297,84 @@ async function aplicar(db, archivos) {
       ('00000000-0000-0000-0000-0000000000a2', 'admin');
   `);
 
+  // 0014: enrolamiento TOTP y defensas contra reutilización y fuerza bruta.
+  const codigo = await db.query(`
+    select public.generar_codigo_enrolamiento(
+      '12345678', 'hash-enrolamiento', now() + interval '1 day',
+      'admin@ucab.edu.ve'
+    ) as id
+  `);
+  afirmar(Boolean(codigo.rows[0].id), "generar_codigo_enrolamiento crea el código");
+
+  const enrolado = await db.query(`
+    select public.enrolar_estudiante(
+      '12345678', 'hash-enrolamiento', 'v1.secreto-cifrado'
+    ) as r
+  `);
+  afirmar(enrolado.rows[0].r.ok === true, "enrolar_estudiante deja la credencial pendiente");
+
+  const reenrolado = await db.query(`
+    select public.enrolar_estudiante(
+      '12345678', 'hash-enrolamiento', 'v1.secreto-nuevo'
+    ) as r
+  `);
+  afirmar(
+    reenrolado.rows[0].r.ok === true,
+    "un enrolamiento pendiente puede reemplazar su secreto",
+  );
+
+  const confirmado = await db.query(`
+    select public.confirmar_totp('estudiante', '12345678', 100) as ok
+  `);
+  afirmar(confirmado.rows[0].ok === true, "confirmar_totp activa la credencial");
+
+  const reconfirmado = await db.query(`
+    select public.confirmar_totp('estudiante', '12345678', 100) as ok
+  `);
+  afirmar(
+    reconfirmado.rows[0].ok === false,
+    "confirmar_totp no vuelve a confirmar una credencial activa",
+  );
+
+  const pasoNuevo = await db.query(`
+    select public.marcar_paso_totp('estudiante', '12345678', 101) as ok
+  `);
+  const pasoRepetido = await db.query(`
+    select public.marcar_paso_totp('estudiante', '12345678', 101) as ok
+  `);
+  afirmar(pasoNuevo.rows[0].ok === true, "marcar_paso_totp acepta un paso nuevo");
+  afirmar(pasoRepetido.rows[0].ok === false, "el mismo código TOTP no se reutiliza");
+
+  const yaActivo = await db.query(`
+    select public.enrolar_estudiante(
+      '12345678', 'hash-enrolamiento', 'v1.otro'
+    ) as r
+  `);
+  afirmar(
+    yaActivo.rows[0].r.codigo === "ya_configurado",
+    "enrolar_estudiante no pisa una credencial ya confirmada",
+  );
+
+  let bloqueado = false;
+  for (let intento = 0; intento < 5; intento += 1) {
+    const fallo = await db.query(`
+      select public.registrar_fallo_totp('estudiante', '12345678') as r
+    `);
+    bloqueado = fallo.rows[0].r.bloqueado;
+  }
+  afirmar(bloqueado, "cinco fallos bloquean temporalmente la app");
+
+  const credenciales = await db.query(`
+    select tipo, sujeto, confirmado_en is not null as activa
+      from public.totp_credenciales
+  `);
+  afirmar(
+    credenciales.rows.length === 1 &&
+      credenciales.rows[0].sujeto === "12345678" &&
+      credenciales.rows[0].activa === true,
+    "totp_credenciales guarda una sola credencial estudiantil activa",
+  );
+
   // 0011: número de llegada por cédula sobre todo el histórico.
   const llegadas = await db.query(`
     select ci,
@@ -561,6 +639,9 @@ async function aplicar(db, archivos) {
     "0008_crear_reporte_atomico.sql",
     "0010_ticket_consultas.sql",
     "0011_numero_llegada.sql",
+    "0012_perfil_alumno.sql",
+    "0013_limite_diario.sql",
+    "0014_totp.sql",
   ]);
 
   // Reproduce lo que había en el proyecto real: permisos por defecto de
@@ -630,7 +711,8 @@ async function aplicar(db, archivos) {
       "reportes",
       "reporte_eventos",
       "administradores",
-      "codigos_verificacion",
+      "totp_credenciales",
+      "totp_enrolamiento",
       "admin_intentos",
       "consulta_intentos",
       "cedula_llegadas",
@@ -666,7 +748,7 @@ async function aplicar(db, archivos) {
       [rol, firma],
     )).rows[0].v;
   const firmaAlta =
-    "public.crear_reporte(text,text,text,text,text,text,public.tipo_error_reporte,text,text)";
+    "public.crear_reporte(text,text,text,text,text,text,public.tipo_error_reporte,text,text,text)";
   afirmar(
     !(await ejecutar("anon", firmaAlta)) &&
       !(await ejecutar("authenticated", firmaAlta)),

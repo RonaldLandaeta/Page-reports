@@ -124,7 +124,7 @@ export async function POST(request: Request) {
     console.error("[api/reportes] token no verificable.", error);
     return respuestaError(
       "interno",
-      "La verificación de correo no está configurada.",
+      "La verificación de identidad no está configurada.",
       500,
     );
   }
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
   if (!sesion || sesion.correo !== correo || sesion.ci !== ci) {
     return respuestaError(
       "verificacion",
-      "Verifica tu correo antes de enviar el reporte.",
+      "Verifica tu identidad con la app de autenticación antes de enviar el reporte.",
       401,
     );
   }

@@ -1,10 +1,11 @@
 import "server-only";
 
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { createClient } from "@supabase/supabase-js";
 import type { NextResponse } from "next/server";
 
+import { CONFIG } from "@/lib/config";
 import { secretoVerificacion } from "@/lib/secreto";
 import {
   claveAnonima,
@@ -145,7 +146,9 @@ function leerCookie(request: Request, nombre: string): string | null {
 }
 
 /** Rol vigente en la base de datos, o null si ya no es administrador. */
-async function rolDeAdministrador(userId: string): Promise<RolAdmin | null> {
+export async function rolDeAdministrador(
+  userId: string,
+): Promise<RolAdmin | null> {
   const { data, error } = await obtenerSupabaseAdmin()
     .from("administradores")
     .select("rol")
@@ -155,6 +158,98 @@ async function rolDeAdministrador(userId: string): Promise<RolAdmin | null> {
   if (error) throw new Error("No se pudieron comprobar los permisos de administrador.");
 
   return data ? (data.rol === "super" ? "super" : "admin") : null;
+}
+
+// ── Token previo al segundo factor ──────────────────────────────────────────
+// Se emite solo después de validar correo y contraseña. No sirve como cookie
+// de sesión: únicamente autoriza el enrolamiento o la comprobación TOTP.
+
+export type PropositoPreAuth = "totp" | "enrolar";
+
+interface CargaPreAuth {
+  /** user_id del administrador. */
+  u: string;
+  /** correo (solo informativo). */
+  e: string;
+  /** expiración en segundos desde epoch (UTC). */
+  x: number;
+  /** propósito: validar TOTP o completar el enrolamiento. */
+  p: PropositoPreAuth;
+  /** nonce: evita que dos tokens idénticos coincidan byte a byte. */
+  n: string;
+}
+
+function clavePreAuth(): Buffer {
+  return createHmac("sha256", secretoVerificacion())
+    .update("admin-preauth-v1")
+    .digest();
+}
+
+function firmarPreAuth(datos: string): Buffer {
+  return createHmac("sha256", clavePreAuth()).update(datos).digest();
+}
+
+export function crearTokenPreAuth(
+  admin: Pick<AdminActual, "userId" | "email">,
+  proposito: PropositoPreAuth,
+): string {
+  const carga: CargaPreAuth = {
+    u: admin.userId,
+    e: admin.email,
+    x:
+      Math.floor(Date.now() / 1000) +
+      CONFIG.duracionTokenPreAuthAdminMinutos * 60,
+    p: proposito,
+    n: randomUUID(),
+  };
+
+  const cuerpo = Buffer.from(JSON.stringify(carga)).toString("base64url");
+
+  return `p1.${cuerpo}.${firmarPreAuth(`p1.${cuerpo}`).toString("base64url")}`;
+}
+
+export function leerTokenPreAuth(
+  token: string,
+): { userId: string; email: string; proposito: PropositoPreAuth } | null {
+  const partes = token.split(".");
+  if (partes.length !== 3 || partes[0] !== "p1") return null;
+
+  const [version, cuerpo, firma] = partes;
+
+  const esperada = firmarPreAuth(`${version}.${cuerpo}`);
+  const recibida = Buffer.from(firma, "base64url");
+
+  if (
+    recibida.length !== esperada.length ||
+    !timingSafeEqual(recibida, esperada)
+  ) {
+    return null;
+  }
+
+  try {
+    const carga: unknown = JSON.parse(
+      Buffer.from(cuerpo, "base64url").toString("utf8"),
+    );
+
+    if (typeof carga !== "object" || carga === null) return null;
+
+    const { u, e, x, p } = carga as Partial<CargaPreAuth>;
+
+    if (
+      typeof u !== "string" ||
+      typeof e !== "string" ||
+      typeof x !== "number" ||
+      (p !== "totp" && p !== "enrolar")
+    ) {
+      return null;
+    }
+
+    if (x <= Math.floor(Date.now() / 1000)) return null;
+
+    return { userId: u, email: e, proposito: p };
+  } catch {
+    return null;
+  }
 }
 
 // ── API pública ─────────────────────────────────────────────────────────────

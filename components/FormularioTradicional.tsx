@@ -29,9 +29,9 @@ import {
 import { AlertIcon, ClockIcon, SendIcon, ShieldIcon } from "./icons";
 import { ModalExito } from "./ModalExito";
 import {
-  VerificacionCorreo,
+  VerificacionTotp,
   type VerificacionAprobada,
-} from "./VerificacionCorreo";
+} from "./VerificacionTotp";
 
 interface FormState {
   ci: string;
@@ -227,7 +227,8 @@ export function FormularioTradicional({
     } else if (!esCorreoInstitucional(correo)) {
       nuevosErrores.correo = mensajeCorreoInstitucional();
     } else if (verificacion?.correo !== correo || verificacion.ci !== ci) {
-      nuevosErrores.correo = "Verifica tu correo antes de enviar el reporte.";
+      nuevosErrores.correo =
+        "Verifica tu identidad con la app de autenticación antes de enviar el reporte.";
     }
 
     if (!esPerfilAlumno(formulario.perfil)) {
@@ -546,7 +547,7 @@ export function FormularioTradicional({
               <ErrorCampo id="correo-error" mensaje={errores.correo} />
               {esCorreoValido(formulario.correo) && !esCedulaValida(formulario.ci) && (
                 <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                  Escribe primero tu cédula para poder verificar el correo.
+                  Escribe primero tu cédula para poder verificar tu identidad.
                 </p>
               )}
             </div>
@@ -588,7 +589,7 @@ export function FormularioTradicional({
           {esCorreoValido(formulario.correo) &&
             esCorreoInstitucional(formulario.correo) &&
             esCedulaValida(formulario.ci) && (
-            <VerificacionCorreo
+            <VerificacionTotp
               key={`${formulario.correo}|${formulario.ci}`}
               correo={formulario.correo}
               ci={formulario.ci.trim()}

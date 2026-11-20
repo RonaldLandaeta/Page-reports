@@ -69,6 +69,19 @@ export async function GET(request: Request) {
 
     if (error) throw error;
 
+    const { data: credenciales, error: errorCredenciales } = await supabase
+      .from("totp_credenciales")
+      .select("sujeto,confirmado_en")
+      .eq("tipo", "admin");
+
+    if (errorCredenciales) throw errorCredenciales;
+
+    const conTotp = new Set(
+      (credenciales ?? [])
+        .filter((fila) => fila.confirmado_en)
+        .map((fila) => fila.sujeto),
+    );
+
     const administradores = await Promise.all(
       (data ?? []).map(async (fila) => {
         const { data: usuario } = await supabase.auth.admin.getUserById(fila.user_id);
@@ -78,6 +91,7 @@ export async function GET(request: Request) {
           email: usuario.user?.email ?? "(sin correo)",
           rol: fila.rol,
           creadoEn: fila.creado_en,
+          totpActivo: conTotp.has(fila.user_id),
         };
       }),
     );
@@ -218,6 +232,18 @@ export async function DELETE(request: Request) {
     }
 
     if (!data?.length) return respuestaError("no_encontrado", "Administrador no encontrado.", 404);
+
+    // Sin el permiso, su app de autenticación tampoco debe sobrevivir: si más
+    // adelante se le vuelve a autorizar, debe enrolarla de nuevo.
+    const { error: errorTotp } = await obtenerSupabaseAdmin()
+      .from("totp_credenciales")
+      .delete()
+      .eq("tipo", "admin")
+      .eq("sujeto", id);
+
+    if (errorTotp) {
+      console.error("[api/admin/administradores:DELETE] no se pudo borrar el TOTP.", errorTotp);
+    }
 
     console.info(`[admin] ${admin.email} quitó el acceso de ${id}.`);
     return respuestaOk({});

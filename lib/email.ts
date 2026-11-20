@@ -126,44 +126,12 @@ async function enviar(
     }
   }
 
-  // 3. Sin proveedor (o todos fallaron): NO se simula un envío exitoso.
-  //    El llamador decidirá si muestra el código en desarrollo o responde 503.
+  // 3. Sin proveedor (o todos fallaron): no se simula un envío exitoso.
   console.warn(
     "[email] no se pudo enviar el correo: no hay proveedor disponible o el envío falló.",
   );
 
   return { enviado: false, proveedor: "dev" };
-}
-
-export async function enviarCodigoVerificacion(
-  correo: string,
-  codigo: string,
-  minutos: number,
-): Promise<ResultadoEnvio> {
-  const asunto = "Tu código de verificación";
-  const texto = [
-    `Tu código de verificación es: ${codigo}`,
-    "",
-    `Vence en ${minutos} minutos.`,
-    "Si no solicitaste este código, ignora este mensaje.",
-  ].join("\n");
-
-  const html = `
-    <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
-      <h1 style="font-size:20px;margin:0 0 8px">Verifica tu correo</h1>
-      <p style="font-size:14px;line-height:22px;color:#475569;margin:0 0 20px">
-        Usa este código para confirmar tu correo y registrar el reporte de horario.
-      </p>
-      <p style="font-family:ui-monospace,monospace;font-size:32px;font-weight:700;letter-spacing:10px;color:#4338ca;background:#eef2ff;border-radius:12px;padding:16px;text-align:center;margin:0 0 20px">
-        ${escaparHtml(codigo)}
-      </p>
-      <p style="font-size:13px;line-height:20px;color:#64748b;margin:0">
-        El código vence en ${minutos} minutos. Si no solicitaste este código, ignora este mensaje.
-      </p>
-    </div>
-  `;
-
-  return enviar(correo, asunto, html, texto);
 }
 
 export async function enviarConfirmacionReporte(

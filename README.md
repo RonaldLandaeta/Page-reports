@@ -16,7 +16,7 @@ Next.js Route Handlers  (/api/*)
   ▼
 Supabase Postgres  ── RLS activo, sin acceso directo para anon
   │                      SOLO reportes/tickets y datos del usuario
-  └── Resend o Gmail SMTP (código de verificación y confirmación)
+  └── Resend o Gmail SMTP (confirmación del ticket)
 
 Malla curricular ── vive en el repositorio (lib/materias), nunca en Supabase
 ```
@@ -26,14 +26,17 @@ Malla curricular ── vive en el repositorio (lib/materias), nunca en Supabase
 - Las reglas de negocio (duplicados, límite diario) se validan en el servidor;
   el ticket único se genera en la API y la base de datos garantiza su unicidad.
 - **La malla curricular es local**: `MALLA_OFICIAL` en `lib/materias/index.ts`.
-  En Supabase solo hay reportes, historial, códigos de verificación, intentos
-  de consulta y administradores. No existen «ofertas»: la persona elige una
-  materia de la malla y reporta el error que tuvo.
+  En Supabase solo hay reportes, historial, credenciales TOTP, códigos de
+  enrolamiento, intentos de consulta y administradores. No existen «ofertas»: la
+  persona elige una materia de la malla y reporta el error que tuvo.
 - El NRC visible (`nroCurso`, ej. `02002`) **se repite entre carreras**, por eso
   el formulario y el chatbot envían el **código único** (`FING-02002`,
   `TELE-02002`) y la API resuelve y guarda ambos (`nrc` y `materia_codigo`).
-- El código de verificación se genera y valida en el servidor. El cliente solo
-  recibe un **token firmado** (HMAC, 20 minutos) que autoriza crear el reporte.
+- La identidad se comprueba con **TOTP** (Google Authenticator, Authy, 1Password,
+  Microsoft Authenticator). El secreto se genera y cifra en el servidor; el
+  cliente solo recibe un **token firmado** (HMAC, 20 minutos) que autoriza crear
+  el reporte. El correo institucional sigue siendo obligatorio como dato de
+  contacto, pero ya no prueba la identidad.
 
 ## Funcionalidad
 
@@ -52,9 +55,10 @@ Malla curricular ── vive en el repositorio (lib/materias), nunca en Supabase
   `codigo`, `nroCurso`, `materia`, `prelaciones`, `correquisitos` y
   `horarioDefecto`. Expone el tipo `Materia` (`codigo`, `nrc`, `nombre`,
   `horario`) y funciones para listar y buscar por código, NRC o nombre.
-- **Verificación de correo real** con código de 6 dígitos enviado por Resend o
-  Gmail SMTP.
-  En desarrollo, si no hay `RESEND_API_KEY`, el código se muestra en pantalla.
+- **Verificación con app de autenticación (TOTP)**. Un administrador genera un
+  código de enrolamiento de un solo uso para la cédula; el estudiante lo canjea,
+  escanea el QR y confirma con el primer código de 6 dígitos. Después solo
+  necesita el código de su app para reportar.
 - **Reglas de negocio en el servidor**:
   - Duplicado con la misma cédula + `materia_codigo` + tipo de error en 24
     horas (así `FING-02002` y `TELE-02002` son reportes distintos).
@@ -88,7 +92,7 @@ Este sistema reemplaza los canales de atención convencionales por una experienc
 ### 🎯 Para el Estudiante
 * **Asistencia Multicanal:** Registro de solicitudes a través de un **formulario tradicional guiado** o mediante un **Chatbot interactivo** que asiste en la búsqueda inteligente de asignaturas.
 * **Catálogo Integrado y Búsqueda Inteligente:** Localización inmediata de materias por código, NRC o nombre, evitando errores de selección.
-* **Verificación de Identidad:** Validación rápida de correo institucional para asegurar la autenticidad de cada reporte.
+* **Verificación de Identidad:** Enrolamiento con app de autenticación (TOTP) y token de un solo uso para autorizar cada reporte.
 * **Seguimiento Transparente:** Consulta de estado en tiempo real (`Pendiente`, `En Revisión`, `Resuelto`) únicamente con el número de ticket y documento de identidad.
 
 ### 🛡️ Para la Administración Académica
@@ -133,12 +137,19 @@ Si deseas clonar y probar la aplicación en un entorno local:
 
 ## API
 
-| Método | Ruta                          | Descripción                                      |
-| ------ | ----------------------------- | ------------------------------------------------ |
-| `POST` | `/api/verificacion/solicitar` | Genera y envía un código de 6 dígitos.           |
-| `POST` | `/api/verificacion/validar`   | Valida el código y devuelve un token firmado.    |
-| `POST` | `/api/reportes`               | Crea el reporte (exige token de verificación).   |
-| `POST` | `/api/reportes/consultar`     | Consulta por ticket + cédula (POST evita la CI en logs/URL). |
+| Método | Ruta                             | Descripción                                                   |
+| ------ | -------------------------------- | ------------------------------------------------------------- |
+| `POST` | `/api/verificacion/estado`       | Indica si la cédula ya tiene una app vinculada.               |
+| `POST` | `/api/verificacion/enrolar`      | Canjea el código de enrolamiento y devuelve el QR.            |
+| `POST` | `/api/verificacion/confirmar`    | Confirma el primer TOTP y devuelve el token firmado.          |
+| `POST` | `/api/verificacion/validar`      | Valida un TOTP y devuelve el token firmado.                   |
+| `POST` | `/api/reportes`                  | Crea el reporte (exige token de verificación).                |
+| `POST` | `/api/reportes/consultar`        | Consulta por ticket + cédula (POST evita la CI en logs/URL).  |
+| `POST` | `/api/admin/login`               | Valida correo y contraseña; devuelve el token previo al TOTP. |
+| `POST` | `/api/admin/totp/enrolar`        | Devuelve el QR para el primer inicio de sesión del admin.     |
+| `POST` | `/api/admin/totp/confirmar`      | Confirma el primer TOTP y crea la cookie de sesión.           |
+| `POST` | `/api/admin/totp/validar`        | Valida el TOTP y crea la cookie de sesión.                    |
+| `POST` | `/api/admin/estudiantes/enrolamiento` | Genera un código de enrolamiento para una cédula.        |
 
 Contrato de error:
 
@@ -180,21 +191,32 @@ tipos se ignora).
    contraseña, marca **Auto Confirm User**) y autorízalo:
    `insert into public.administradores (user_id) select id from auth.users where email = 'tu-admin@dominio';`
    (la migración 0007 convierte en `super` al administrador más antiguo).
-2. La sesión es una cookie `httpOnly` firmada de **2 horas como máximo**
+2. La contraseña es solo el primer factor. En el primer inicio de sesión el
+   administrador debe vincular obligatoriamente una app de autenticación (TOTP):
+   se muestra un QR y hay que confirmar con el primer código de 6 dígitos. En
+   los siguientes accesos se pide el código de la app. **No se crea ninguna
+   cookie de sesión hasta superar el segundo factor.**
+3. La sesión es una cookie `httpOnly` firmada de **2 horas como máximo**
    (`ADMIN_SESION_HORAS` solo puede acortarla), sin renovación. En cada
    petición se lee de la base si el usuario sigue siendo administrador y con
    qué rol: si lo quitas o lo degradas, rige al instante.
-3. Roles: `admin` gestiona reportes; `super` además agrega/quita
-   administradores y cambia roles (sección «Administradores», solo visible para
-   super). Un trigger impide dejar el sistema sin ningún super.
-4. Lotes: marca reportes y pásalos de estado juntos. Para descargar (CSV para
+4. Roles: `admin` gestiona reportes; `super` además agrega/quita
+   administradores, cambia roles y reinicia la app TOTP de otro administrador
+   (sección «Administradores», solo visible para super). Un trigger impide
+   dejar el sistema sin ningún super. No hay códigos de respaldo: la
+   recuperación es siempre un reinicio por un super.
+5. Cualquier administrador puede generar **códigos de enrolamiento para
+   estudiantes** desde el panel: se introduce la cédula, se entrega el código de
+   un solo uso (24 h) y el estudiante lo canjea escaneando el QR. El mismo
+   mecanismo sirve para reiniciar la app si el estudiante cambió de teléfono.
+6. Lotes: marca reportes y pásalos de estado juntos. Para descargar (CSV para
    Excel o JSON para app_ingresos) escribe un rango de números de llegada
    (p. ej. `1-10`, que incluye todas las cédulas con llegada 1 a 10) o descarga
    todo lo que cumpla el filtro (hasta 5000). Al descargar, los «Pendiente de
    revisión» pasan a «En revisión».
-5. Auditoría: cada intento de login queda en `public.admin_intentos` (correo,
-   IP hasheada, motivo) y cada cambio de estado guarda en
-   `reporte_eventos.admin_email` quién lo hizo.
+7. Auditoría: cada intento de login queda en `public.admin_intentos` (correo,
+   IP hasheada, motivo, incluido `mfa_requerido` y `mfa_fallido`) y cada cambio
+   de estado guarda en `reporte_eventos.admin_email` quién lo hizo.
 
 ### Exportación para app_ingresos (`datos.json`)
 
@@ -251,7 +273,7 @@ no se expone el estado interno del proyecto.
 > `tipo_error_detalle` inexistentes), de tipo (`estado`/`tipo_error` como
 > texto en vez de enum) o de función (`crear_reporte` inexistente), ejecuta
 > `supabase/setup.sql` completo o las migraciones pendientes (la última es
-> `0013_limite_diario.sql`).
+> `0014_totp.sql`).
 
 ### Comprobaciones en Supabase
 
@@ -268,8 +290,12 @@ order by table_name;
 select proname
 from pg_proc
 where proname in (
-  'registrar_intento_codigo',
-  'consumir_codigo',
+  'crear_totp_pendiente',
+  'enrolar_estudiante',
+  'confirmar_totp',
+  'marcar_paso_totp',
+  'registrar_fallo_totp',
+  'generar_codigo_enrolamiento',
   'cambiar_estado_reporte',
   'crear_reporte',
   'limpiar_codigos_vencidos'
@@ -310,24 +336,29 @@ completo. Es idempotente.
   funciones a `anon` y `authenticated`; las tablas nuevas nacen cerradas.
 - La escritura de reportes se hace con `service_role`; las funciones SQL de
   verificación tienen `EXECUTE` revocado para `anon`/`authenticated`.
-- El token de verificación queda ligado a una cédula (una cédula puede tener
-  varios tokens; un token sirve para una sola cédula).
-- Tokens HMAC con expiración; códigos guardados como hash, con límite de
-  intentos y expiración.
-- Límites de solicitud de códigos por correo (5/hora, 1 cada 60 s) y por IP
-  (20/hora).
-- Intentos de código contados y canje del código hechos de forma atómica en
-  Postgres.
-- **Solo se acepta el dominio institucional exacto `@est.ucab.edu.ve`**, tanto
-  al pedir el código como al crear el reporte. No se configura por variable.
+- El token de verificación queda ligado a una cédula y al correo del formulario
+  (una cédula puede tener varios tokens; un token sirve para una sola cédula).
+- Los secretos TOTP se guardan cifrados con AES-256-GCM. La clave se deriva de
+  `TOTP_SECRET` (o de `VERIFICACION_SECRET` si no se define) y nunca se expone
+  al navegador.
+- Cada código TOTP se acepta una sola vez: `marcar_paso_totp` impide reutilizar
+  el mismo paso de 30 s. Cinco fallos bloquean la app 15 minutos.
+- Los códigos de enrolamiento son de un solo uso, se guardan como hash HMAC,
+  vencen a las 24 h y solo los genera un administrador autenticado.
+- Los tokens previos al segundo factor de `/admin` viven 10 minutos y solo
+  autorizan el enrolamiento o la validación TOTP; no son cookies de sesión.
+- **Solo se acepta el dominio institucional exacto `@est.ucab.edu.ve`** como
+  dato de contacto, tanto en el formulario como al crear el reporte. No se
+  configura por variable.
 - **Un correo institucional solo puede quedar vinculado a una cédula**: se
-  comprueba al validar el código y otra vez, de forma atómica, en
+  comprueba al validar el TOTP y otra vez, de forma atómica, en
   `crear_reporte`.
 - Consulta por ticket + cédula: máximo 10 consultas fallidas por IP y 20 por
   cédula cada 15 min; el correo se devuelve enmascarado.
 - Login de `/admin`: máximo 10 intentos fallidos por IP y 5 por correo cada
   15 min (el bloqueo por correo frena ataques distribuidos; también permite
-  bloquear una cuenta a propósito, decisión aceptada).
+  bloquear una cuenta a propósito, decisión aceptada). El TOTP es obligatorio y
+  se auditan `mfa_requerido` y `mfa_fallido`.
 - La sesión de administrador usa una cookie `httpOnly` firmada con prefijo
   `__Host-` en producción (sin `Domain`, `Secure` y `Path=/`).
 - La creación del reporte es atómica en Postgres (`crear_reporte`): un
@@ -335,8 +366,9 @@ completo. Es idempotente.
   el límite diario o la regla «un correo, una cédula» con peticiones
   simultáneas. En producción no hay ruta de respaldo: si falta la función, la
   API falla de forma visible. Ejecuta `supabase/setup.sql` para actualizarla.
-- El ticket duplicado solo se devuelve a quien usa el mismo correo verificado;
-  a cualquier otra persona solo se le informa que el reporte ya existe.
+- El ticket duplicado solo se devuelve a quien usa el mismo correo del token de
+  verificación; a cualquier otra persona solo se le informa que el reporte ya
+  existe.
 - Los tickets nuevos llevan **7 dígitos** (`TK-1234567`); los antiguos de 6
   siguen siendo consultables.
 - Las peticiones JSON tienen un tope de 64 KB y las respuestas de API llevan
@@ -348,8 +380,7 @@ completo. Es idempotente.
 - Cabeceras de seguridad en `next.config.ts`: CSP, HSTS (solo producción),
   `X-Frame-Options`, `Cross-Origin-Opener-Policy`,
   `Cross-Origin-Resource-Policy`, `Permissions-Policy` y `nosniff`.
-- El correo nunca simula un envío exitoso: si no hay proveedor o falla, la API
-  responde con error y no entrega el código (en desarrollo puede mostrar el
-  código con `MOSTRAR_CODIGO_DEMO=true`).
+- El correo de confirmación es best-effort: si no hay proveedor o falla, el
+  reporte ya quedó registrado y solo se pierde la notificación.
 - La consola JSON muestra cédula y motivo: solo existe en desarrollo y en
   producción siempre queda apagada.

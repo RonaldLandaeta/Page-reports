@@ -1,111 +1,67 @@
 import "server-only";
 
-import {
-  createHmac,
-  randomInt,
-  randomUUID,
-  timingSafeEqual,
-} from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { CONFIG } from "@/lib/config";
-import { enviarCodigoVerificacion } from "@/lib/email";
+import {
+  ErrorVerificacion,
+  codigoApiDeError,
+} from "@/lib/errores-verificacion";
 import { secretoVerificacion } from "@/lib/secreto";
 import { obtenerSupabaseAdmin } from "@/lib/supabase/admin";
+import {
+  cifrarSecreto,
+  generarCodigoEnrolamiento,
+  generarSecretoTotp,
+  hashCodigoEnrolamiento,
+  normalizarCodigoEnrolamiento,
+  qrDataUrl,
+  urlOtpauth,
+  LONGITUD_CODIGO_ENROLAMIENTO,
+} from "@/lib/totp";
+import {
+  confirmarCredencialTotp,
+  estadoCredencialTotp,
+  validarCredencialTotp,
+  type EstadoCredencial,
+} from "@/lib/totp-servidor";
 import {
   esCedulaValida,
   esCorreoInstitucional,
   mensajeCorreoInstitucional,
 } from "@/lib/validaciones";
 
-export type CodigoErrorVerificacion =
-  | "validacion"
-  | "limite"
-  | "expirado"
-  | "codigo"
-  | "interno";
+export { ErrorVerificacion, codigoApiDeError };
+export type { CodigoErrorVerificacion } from "@/lib/errores-verificacion";
 
-export class ErrorVerificacion extends Error {
-  readonly codigo: CodigoErrorVerificacion;
-  readonly status: number;
-
-  constructor(codigo: CodigoErrorVerificacion, mensaje: string, status = 400) {
-    super(mensaje);
-    this.name = "ErrorVerificacion";
-    this.codigo = codigo;
-    this.status = status;
-  }
-}
-
-const MS_HORA = 60 * 60 * 1000;
-
-const secreto = secretoVerificacion;
-
-/**
- * Código fijo de pruebas. Por defecto es `123456` para poder completar el
- * flujo sin proveedor de correo (también en producción). Con
- * `VERIFICACION_CODIGO_FIJO=off` se vuelve al código aleatorio + correo.
- *
- * Mientras esté activo: no se envía correo, no se aplican los límites de
- * solicitudes y el código se devuelve en la respuesta para mostrarlo en
- * pantalla.
- */
-function codigoVerificacionFijo(): string | null {
-  const valor = (process.env.VERIFICACION_CODIGO_FIJO ?? "").trim();
-
-  if (/^(off|false|0|no)$/i.test(valor)) return null;
-
-  return valor || "123456";
-}
-
-function hashCodigo(correo: string, codigo: string): string {
-  return createHmac("sha256", secreto())
-    .update(`${correo}:${codigo}`)
-    .digest("hex");
-}
-
-/**
- * Si el correo no se pudo enviar, el código insertado no debe contar para el
- * límite por hora. Si el borrado falla, se registra para poder detectarlo.
- */
-async function borrarCodigoNoEnviado(
-  supabase: ReturnType<typeof obtenerSupabaseAdmin>,
-  id: string,
-): Promise<void> {
-  const { error } = await supabase
-    .from("codigos_verificacion")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    console.error("[verificacion] no se pudo borrar el código no enviado.", error);
-  }
-}
+export const EMISOR_TOTP = "Reportes Horarios UCAB";
 
 function firmarToken(correo: string, ci: string): string {
   const payload = {
     c: correo,
     i: ci,
-    e: Math.floor(Date.now() / 1000) +
+    e:
+      Math.floor(Date.now() / 1000) +
       CONFIG.duracionTokenVerificacionMinutos * 60,
     n: randomUUID(),
   };
 
   const cuerpo = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const firma = createHmac("sha256", secreto())
+  const firma = createHmac("sha256", secretoVerificacion())
     .update(cuerpo)
     .digest("base64url");
 
   return `${cuerpo}.${firma}`;
 }
 
-/** Verifica un token emitido tras validar el código. */
+/** Verifica un token emitido tras validar el código TOTP. */
 export function verificarTokenVerificacion(
   token: string,
 ): { correo: string; ci: string } | null {
   const [cuerpo, firma] = token.split(".");
   if (!cuerpo || !firma) return null;
 
-  const esperada = createHmac("sha256", secreto())
+  const esperada = createHmac("sha256", secretoVerificacion())
     .update(cuerpo)
     .digest("base64url");
   const recibidaBuffer = Buffer.from(firma);
@@ -142,232 +98,17 @@ export function verificarTokenVerificacion(
   }
 }
 
-/**
- * Genera un código, aplica límites por correo e IP y lo envía.
- * En desarrollo, si Resend no está configurado, devuelve `codigoDemo`.
- * Con `VERIFICACION_CODIGO_FIJO` definido, usa ese código, no envía correo y
- * siempre devuelve `codigoDemo` para mostrarlo en pantalla.
- */
-export async function solicitarCodigo(
-  correo: string,
-  ipHash: string,
-): Promise<{ expiraEn: string; codigoDemo?: string }> {
-  if (!esCorreoInstitucional(correo)) {
-    throw new ErrorVerificacion(
-      "validacion",
-      mensajeCorreoInstitucional(),
-      422,
-    );
-  }
-
-  const supabase = obtenerSupabaseAdmin();
-
-  // Modo prueba: código fijo, sin envío de correo y sin límites de solicitudes.
-  // Se desactiva solo con VERIFICACION_CODIGO_FIJO=off.
-  const codigoFijo = codigoVerificacionFijo();
-
-  if (codigoFijo) {
-    if (process.env.NODE_ENV === "production") {
-      console.warn(
-        "[verificacion] ATENCIÓN: código de verificación fijo activo en producción. " +
-          "Define VERIFICACION_CODIGO_FIJO=off para usar el flujo real con correo.",
-      );
-    }
-    const expiraEn = new Date(
-      Date.now() + CONFIG.duracionCodigoVerificacionMinutos * 60 * 1000,
-    ).toISOString();
-
-    const { error: errorFijo } = await supabase
-      .from("codigos_verificacion")
-      .insert({
-        correo,
-        codigo_hash: hashCodigo(correo, codigoFijo),
-        expira_en: expiraEn,
-        ip_hash: ipHash,
-      });
-
-    if (errorFijo) {
-      console.error(
-        "[verificacion] no se pudo guardar el código fijo.",
-        errorFijo,
-      );
-      throw new ErrorVerificacion(
-        "interno",
-        "No pudimos generar el código.",
-        500,
-      );
-    }
-
-    console.info(
-      `[verificacion:prueba] Código fijo para ${correo}: ${codigoFijo}`,
-    );
-
-    return { expiraEn, codigoDemo: codigoFijo };
-  }
-
-  const desdeHora = new Date(Date.now() - MS_HORA).toISOString();
-
-  const { count: porCorreo, error: errorConteo } = await supabase
-    .from("codigos_verificacion")
-    .select("id", { count: "exact", head: true })
-    .eq("correo", correo)
-    .gte("creado_en", desdeHora);
-
-  if (errorConteo) {
-    console.error("[verificacion] conteo por correo falló.", errorConteo);
-    throw new ErrorVerificacion(
-      "interno",
-      "No pudimos procesar la solicitud.",
-      500,
-    );
-  }
-
-  if ((porCorreo ?? 0) >= CONFIG.maxSolicitudesCodigoPorHora) {
-    throw new ErrorVerificacion(
-      "limite",
-      "Solicitaste demasiados códigos. Espera una hora antes de intentarlo de nuevo.",
-      429,
-    );
-  }
-
-  const { data: ultimo, error: errorUltimo } = await supabase
-    .from("codigos_verificacion")
-    .select("creado_en")
-    .eq("correo", correo)
-    .order("creado_en", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (errorUltimo) {
-    console.error("[verificacion] última solicitud falló.", errorUltimo);
-    throw new ErrorVerificacion(
-      "interno",
-      "No pudimos procesar la solicitud.",
-      500,
-    );
-  }
-
-  if (ultimo) {
-    const transcurrido = Date.now() - Date.parse(ultimo.creado_en);
-    const espera = CONFIG.segundosEntreSolicitudes * 1000 - transcurrido;
-
-    if (espera > 0) {
-      throw new ErrorVerificacion(
-        "limite",
-        `Espera ${Math.ceil(espera / 1000)} segundos antes de pedir otro código.`,
-        429,
-      );
-    }
-  }
-
-  const { count: porIp, error: errorIp } = await supabase
-    .from("codigos_verificacion")
-    .select("id", { count: "exact", head: true })
-    .eq("ip_hash", ipHash)
-    .gte("creado_en", desdeHora);
-
-  if (errorIp) {
-    console.error("[verificacion] conteo por IP falló.", errorIp);
-    throw new ErrorVerificacion(
-      "interno",
-      "No pudimos procesar la solicitud.",
-      500,
-    );
-  }
-
-  if ((porIp ?? 0) >= CONFIG.maxSolicitudesCodigoPorIpHora) {
-    throw new ErrorVerificacion(
-      "limite",
-      "Demasiadas solicitudes desde tu conexión. Intenta más tarde.",
-      429,
-    );
-  }
-
-  const codigo = String(randomInt(0, 1_000_000)).padStart(6, "0");
-  const expiraEn = new Date(
-    Date.now() + CONFIG.duracionCodigoVerificacionMinutos * 60 * 1000,
-  ).toISOString();
-
-  const { data: fila, error: errorInsert } = await supabase
-    .from("codigos_verificacion")
-    .insert({
-      correo,
-      codigo_hash: hashCodigo(correo, codigo),
-      expira_en: expiraEn,
-      ip_hash: ipHash,
-    })
-    .select("id")
-    .single();
-
-  if (errorInsert || !fila) {
-    console.error("[verificacion] no se pudo guardar el código.", errorInsert);
-    throw new ErrorVerificacion(
-      "interno",
-      "No pudimos generar el código.",
-      500,
-    );
-  }
-
-  let enviado = false;
-
-  try {
-    const resultado = await enviarCodigoVerificacion(
-      correo,
-      codigo,
-      CONFIG.duracionCodigoVerificacionMinutos,
-    );
-    enviado = resultado.enviado;
-  } catch (error) {
-    console.error("[verificacion] envío de correo falló.", error);
-    await borrarCodigoNoEnviado(supabase, fila.id);
-
-    throw new ErrorVerificacion(
-      "interno",
-      "No pudimos enviar el correo de verificación. Intenta más tarde.",
-      502,
-    );
-  }
-
-  const esDesarrollo = process.env.NODE_ENV !== "production";
-
-  if (!enviado && !esDesarrollo) {
-    await borrarCodigoNoEnviado(supabase, fila.id);
-    throw new ErrorVerificacion(
-      "interno",
-      "El envío de correo no está configurado.",
-      503,
-    );
-  }
-
-  const mostrarDemo =
-    !enviado &&
-    esDesarrollo &&
-    process.env.MOSTRAR_CODIGO_DEMO !== "false";
-
-  if (mostrarDemo) {
-    console.info(`[verificacion:dev] Código para ${correo}: ${codigo}`);
-  }
-
-  return {
-    expiraEn,
-    ...(mostrarDemo ? { codigoDemo: codigo } : {}),
-  };
-}
-
-/** Valida el código y devuelve un token firmado de corta duración. */
-export async function validarCodigo(
-  correo: string,
-  codigo: string,
-  ci: string,
-): Promise<{ token: string }> {
+function exigirCedula(ci: string): void {
   if (!esCedulaValida(ci)) {
     throw new ErrorVerificacion(
       "validacion",
-      "Ingresa una cédula válida antes de verificar el correo.",
+      "Ingresa una cédula válida antes de verificar tu identidad.",
       422,
     );
   }
+}
 
+function exigirCorreo(correo: string): void {
   if (!esCorreoInstitucional(correo)) {
     throw new ErrorVerificacion(
       "validacion",
@@ -375,162 +116,236 @@ export async function validarCodigo(
       422,
     );
   }
+}
 
+function exigirCodigo(codigo: string): void {
   if (!/^\d{6}$/.test(codigo)) {
     throw new ErrorVerificacion(
       "validacion",
       "El código debe tener exactamente 6 dígitos.",
+      422,
     );
   }
+}
 
-  const supabase = obtenerSupabaseAdmin();
-
-  const { data: fila, error } = await supabase
-    .from("codigos_verificacion")
-    .select("id, codigo_hash, expira_en, intentos, consumido_en")
-    .eq("correo", correo)
-    .is("consumido_en", null)
-    .order("creado_en", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[verificacion] consulta de código falló.", error);
-    throw new ErrorVerificacion(
-      "interno",
-      "No pudimos validar el código.",
-      500,
-    );
-  }
-
-  if (!fila) {
-    throw new ErrorVerificacion(
-      "expirado",
-      "El código expiró o no existe. Solicita uno nuevo.",
-    );
-  }
-
-  if (Date.parse(fila.expira_en) < Date.now()) {
-    throw new ErrorVerificacion(
-      "expirado",
-      "El código expiró. Solicita uno nuevo.",
-    );
-  }
-
-  if (fila.intentos >= CONFIG.maxIntentosCodigo) {
-    throw new ErrorVerificacion(
-      "limite",
-      "Demasiados intentos con este código. Solicita uno nuevo.",
-      429,
-    );
-  }
-
-  // El intento se cuenta ANTES de comparar y de forma atómica en Postgres:
-  // peticiones paralelas no pueden adivinar más de `maxIntentosCodigo` veces.
-  const { data: intentos, error: errorIntento } = await supabase.rpc(
-    "registrar_intento_codigo",
-    { p_id: fila.id },
-  );
-
-  if (errorIntento) {
-    console.error("[verificacion] no se pudo contar el intento.", errorIntento);
-    throw new ErrorVerificacion(
-      "interno",
-      "No pudimos validar el código.",
-      500,
-    );
-  }
-
-  // `registrar_intento_codigo` devuelve null cuando el código ya fue consumido
-  // (o canjeado en paralelo). Para el usuario eso es un código expirado.
-  if (intentos === null) {
-    throw new ErrorVerificacion(
-      "expirado",
-      "El código ya fue usado o expiró. Solicita uno nuevo.",
-    );
-  }
-
-  if (typeof intentos !== "number") {
-    console.error("[verificacion] respuesta inesperada al contar el intento.", intentos);
-    throw new ErrorVerificacion(
-      "interno",
-      "No pudimos validar el código.",
-      500,
-    );
-  }
-
-  if (intentos > CONFIG.maxIntentosCodigo) {
-    throw new ErrorVerificacion(
-      "limite",
-      "Demasiados intentos con este código. Solicita uno nuevo.",
-      429,
-    );
-  }
-
-  const esperado = Buffer.from(fila.codigo_hash, "hex");
-  const recibido = Buffer.from(hashCodigo(correo, codigo), "hex");
-
-  if (
-    esperado.length !== recibido.length ||
-    !timingSafeEqual(esperado, recibido)
-  ) {
-    throw new ErrorVerificacion(
-      "codigo",
-      "El código no coincide. Revisa los 6 dígitos e intenta de nuevo.",
-    );
-  }
-
-  // Solo con un código válido se comprueba el vínculo correo-cédula: así no
-  // se puede sondear si un correo pertenece a una cédula sin acceso al buzón.
-  // `crear_reporte` lo vuelve a comprobar de forma atómica antes de insertar.
-  const { data: vinculo, error: errorVinculo } = await supabase
+/** El correo es dato de contacto; la base sigue exigiendo un correo por cédula. */
+async function comprobarVinculoCorreoCedula(
+  correo: string,
+  ci: string,
+): Promise<void> {
+  const { data, error } = await obtenerSupabaseAdmin()
     .from("reportes")
     .select("ci")
     .eq("correo", correo)
     .limit(1)
     .maybeSingle();
 
-  if (errorVinculo) {
+  if (error) {
     console.error(
       "[verificacion] no se pudo comprobar el vínculo correo-cédula.",
-      errorVinculo,
+      error,
     );
     throw new ErrorVerificacion(
       "interno",
-      "No pudimos validar el correo.",
+      "No pudimos comprobar el correo.",
       500,
     );
   }
 
-  if (vinculo && vinculo.ci !== ci) {
+  if (data && data.ci !== ci) {
     throw new ErrorVerificacion(
       "validacion",
       "Este correo ya está vinculado a otra cédula. Usa el correo con el que registraste tus reportes.",
       409,
     );
   }
+}
 
-  // Consumo atómico: un código solo puede canjearse una vez.
-  const { data: consumido, error: errorConsumo } = await supabase.rpc(
-    "consumir_codigo",
-    { p_id: fila.id },
+// ── API del flujo para estudiantes ──────────────────────────────────────────
+
+export async function estadoVerificacionEstudiante(
+  ci: string,
+): Promise<{ estado: EstadoCredencial }> {
+  exigirCedula(ci);
+  return { estado: await estadoCredencialTotp("estudiante", ci) };
+}
+
+/**
+ * Valida el código de enrolamiento y devuelve el secreto/QR una sola vez.
+ * El código no se consume hasta que el estudiante confirma el primer código,
+ * así puede volver a escanear el QR si recarga la página.
+ */
+export async function enrolarEstudiante(
+  ci: string,
+  codigoEnrolamiento: string,
+): Promise<{
+  qr: string;
+  secreto: string;
+  cuenta: string;
+  emisor: string;
+}> {
+  exigirCedula(ci);
+
+  const codigo = normalizarCodigoEnrolamiento(codigoEnrolamiento);
+
+  if (codigo.length !== LONGITUD_CODIGO_ENROLAMIENTO) {
+    throw new ErrorVerificacion(
+      "validacion",
+      "El código de enrolamiento no tiene el formato correcto.",
+      422,
+    );
+  }
+
+  const secreto = generarSecretoTotp();
+  const secretoCifrado = cifrarSecreto(secreto);
+
+  const { data, error } = await obtenerSupabaseAdmin().rpc(
+    "enrolar_estudiante",
+    {
+      p_ci: ci,
+      p_codigo_hash: hashCodigoEnrolamiento(codigo),
+      p_secreto: secretoCifrado,
+    },
   );
 
-  if (errorConsumo) {
-    console.error("[verificacion] no se pudo consumir el código.", errorConsumo);
+  if (error) {
+    console.error("[verificacion] no se pudo crear el enrolamiento.", error);
     throw new ErrorVerificacion(
       "interno",
-      "No pudimos completar la verificación.",
+      "No pudimos iniciar el enrolamiento.",
       500,
     );
   }
 
-  if (consumido !== true) {
+  const resultado = (data ?? {}) as {
+    ok?: boolean;
+    codigo?: string;
+    mensaje?: string;
+  };
+
+  if (resultado.ok !== true) {
+    if (resultado.codigo === "ya_configurado") {
+      throw new ErrorVerificacion(
+        "ya_configurado",
+        resultado.mensaje ??
+          "Esta cédula ya tiene una app vinculada. Pide a un administrador que la reinicie.",
+        409,
+      );
+    }
+
     throw new ErrorVerificacion(
-      "expirado",
-      "El código ya fue usado o expiró. Solicita uno nuevo.",
+      resultado.codigo === "validacion" ? "validacion" : "codigo",
+      resultado.mensaje ??
+        "El código de enrolamiento no es válido o expiró.",
+      400,
+    );
+  }
+
+  const url = urlOtpauth({
+    secreto,
+    cuenta: ci,
+    emisor: EMISOR_TOTP,
+    periodo: CONFIG.totpPeriodoSegundos,
+    digitos: CONFIG.totpDigitos,
+  });
+
+  return {
+    qr: await qrDataUrl(url),
+    secreto,
+    cuenta: ci,
+    emisor: EMISOR_TOTP,
+  };
+}
+
+/** Confirma el primer código y devuelve el token firmado para reportar. */
+export async function confirmarEstudiante(
+  ci: string,
+  correo: string,
+  codigo: string,
+): Promise<{ token: string }> {
+  exigirCedula(ci);
+  exigirCorreo(correo);
+  exigirCodigo(codigo);
+
+  // Se comprueba el vínculo antes de gastar el código TOTP: un correo ajeno no
+  // debe consumir el primer código del enrolamiento.
+  await comprobarVinculoCorreoCedula(correo, ci);
+  await confirmarCredencialTotp("estudiante", ci, codigo);
+
+  // El código de enrolamiento ya cumplió su función: no debe reutilizarse.
+  const { error } = await obtenerSupabaseAdmin().rpc(
+    "consumir_enrolamiento",
+    { p_ci: ci },
+  );
+
+  if (error) {
+    console.error(
+      "[verificacion] no se pudo consumir el código de enrolamiento.",
+      error,
     );
   }
 
   return { token: firmarToken(correo, ci) };
+}
+
+/** Valida un código TOTP normal y devuelve el token firmado para reportar. */
+export async function validarEstudiante(
+  ci: string,
+  correo: string,
+  codigo: string,
+): Promise<{ token: string }> {
+  exigirCedula(ci);
+  exigirCorreo(correo);
+  exigirCodigo(codigo);
+
+  await comprobarVinculoCorreoCedula(correo, ci);
+  await validarCredencialTotp("estudiante", ci, codigo);
+
+  return { token: firmarToken(correo, ci) };
+}
+
+// ── API para el panel de administración ─────────────────────────────────────
+
+/** Genera un código de enrolamiento y reinicia la app de esa cédula. */
+export async function generarEnrolamientoEstudiante(
+  ci: string,
+  creadoPor: string,
+): Promise<{ codigo: string; expiraEn: string }> {
+  exigirCedula(ci);
+
+  const codigo = generarCodigoEnrolamiento();
+  const expiraEn = new Date(
+    Date.now() + CONFIG.duracionCodigoEnrolamientoHoras * 60 * 60 * 1000,
+  ).toISOString();
+
+  const { error } = await obtenerSupabaseAdmin().rpc(
+    "generar_codigo_enrolamiento",
+    {
+      p_ci: ci,
+      p_codigo_hash: hashCodigoEnrolamiento(codigo),
+      p_expira_en: expiraEn,
+      p_creado_por: creadoPor.slice(0, 254),
+    },
+  );
+
+  if (error) {
+    console.error(
+      "[verificacion] no se pudo generar el código de enrolamiento.",
+      error,
+    );
+    throw new ErrorVerificacion(
+      "interno",
+      "No pudimos generar el código de enrolamiento.",
+      500,
+    );
+  }
+
+  return { codigo, expiraEn };
+}
+
+export async function estadoEstudiante(
+  ci: string,
+): Promise<EstadoCredencial> {
+  exigirCedula(ci);
+  return estadoCredencialTotp("estudiante", ci);
 }

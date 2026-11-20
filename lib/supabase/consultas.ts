@@ -87,7 +87,9 @@ export type MotivoIntentoAdmin =
   | "ok"
   | "credenciales"
   | "sin_permiso"
-  | "bloqueado";
+  | "bloqueado"
+  | "mfa_requerido"
+  | "mfa_fallido";
 
 /**
  * Bloqueo de login de /admin por correo, además del bloqueo por IP. Así un

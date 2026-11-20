@@ -47,34 +47,31 @@ type Paso =
   | "ci"
   | "nombre"
   | "correo"
+  | "enrolamiento"
   | "verificacion"
   | "nrc"
   | "tipo_error"
   | "detalle"
   | "motivo";
 
-/** El usuario puede pedir otro código estando en el paso de verificación. */
-const COMANDO_REENVIAR = new Set([
-  "reenviar",
-  "reenviar codigo",
-  "otro codigo",
-  "nuevo codigo",
-]);
-
 interface Mensaje {
   id: number;
   autor: "bot" | "usuario";
   texto: string;
   ticket?: string;
+  /** QR (data URL) para vincular la app de autenticación. */
+  qr?: string;
 }
 
-type ContenidoBot = { texto: string; ticket?: string };
+type ContenidoBot = { texto: string; ticket?: string; qr?: string };
 
 interface Datos {
   ci?: string;
   nombre?: string;
   correo?: string;
   verificacionToken?: string;
+  /** true cuando el código ya se validó y falta confirmar el primer TOTP. */
+  enrolamientoPendiente?: boolean;
   materia?: Materia;
   tipo_error?: TipoError;
   /** Solo para "otro" (máx. 100 caracteres). */
@@ -88,8 +85,6 @@ interface Respuesta {
   opciones?: Materia[];
   /** Descarta los datos acumulados (reporte terminado o bloqueado). */
   reiniciar?: boolean;
-  /** Código devuelto por la API en modo prueba, para mostrarlo en pantalla. */
-  codigoDemo?: string;
 }
 
 interface ContextoProceso {
@@ -106,8 +101,10 @@ const PREGUNTAS: Record<Paso, string> = {
   ci: `¿Cuál es tu cédula? (${CEDULA_MIN_DIGITOS} a ${CEDULA_MAX_DIGITOS} dígitos)`,
   nombre: "Gracias. ¿Cuál es tu nombre completo?",
   correo: "¿A qué correo te enviamos la confirmación?",
+  enrolamiento:
+    "Escribe el código de enrolamiento que te entregó un administrador. Si no tienes uno, pídelo antes de continuar.",
   verificacion:
-    "Escribe el código de 6 dígitos que enviamos a tu correo. Si no lo tienes, pulsa «Reenviar código».",
+    "Escribe el código de 6 dígitos que muestra tu app de autenticación.",
   nrc: "¿En qué materia está el problema? Escribe el NRC, el código o el nombre, o elige una de la lista.",
   tipo_error: "¿Qué tipo de problema es?",
   detalle: `Especifica el error (máximo ${DETALLE_ERROR_MAX} caracteres).`,
@@ -118,6 +115,7 @@ const PLACEHOLDERS: Record<Paso, string> = {
   ci: "Ej. 12345678",
   nombre: "Ej. Ana Martínez",
   correo: "nombre@est.ucab.edu.ve",
+  enrolamiento: "Código de enrolamiento",
   verificacion: "Código de 6 dígitos",
   nrc: "NRC, código o nombre de la materia",
   tipo_error: "Elige una opción o escríbela",
@@ -129,7 +127,8 @@ const ETIQUETAS: Record<Paso, string> = {
   ci: "cédula",
   nombre: "nombre",
   correo: "correo",
-  verificacion: "código de verificación",
+  enrolamiento: "código de enrolamiento",
+  verificacion: "código de la app de autenticación",
   nrc: "materia",
   tipo_error: "tipo de problema",
   detalle: "especifica el error",
@@ -140,6 +139,7 @@ const MAX_LONGITUD: Record<Paso, number> = {
   ci: CEDULA_MAX_DIGITOS,
   nombre: 100,
   correo: 254,
+  enrolamiento: 10,
   verificacion: 6,
   nrc: 80,
   tipo_error: 40,
@@ -243,35 +243,92 @@ async function procesar(
         return rechazo("correo", mensajeCorreoInstitucional());
       }
 
+      if (!datos.ci) {
+        return bloqueo("Perdí tu cédula. Empecemos de nuevo.");
+      }
+
       try {
-        const resultado = await postJson<{ codigoDemo?: string }>(
-          "/api/verificacion/solicitar",
-          { correo },
+        const { estado } = await postJson<{ estado: string }>(
+          "/api/verificacion/estado",
+          { ci: datos.ci },
         );
 
         datos.correo = correo;
         datos.verificacionToken = undefined;
+        datos.enrolamientoPendiente = false;
 
-        const mensajes: ContenidoBot[] = [
-          { texto: `Te enviamos un código de 6 dígitos a ${correo}.` },
-        ];
-
-        if (resultado.codigoDemo) {
-          mensajes.push({
-            texto: `Código de prueba: ${resultado.codigoDemo}.`,
-          });
+        if (estado === "activo") {
+          return avanzar("verificacion", [
+            {
+              texto: `Perfecto, ${correo}. Abre tu app de autenticación y escribe el código de 6 dígitos.`,
+            },
+          ]);
         }
 
-        return {
-          ...avanzar("verificacion", mensajes),
-          codigoDemo: resultado.codigoDemo,
-        };
+        return avanzar("enrolamiento", [
+          {
+            texto: `Perfecto, ${correo}. Tu cédula aún no tiene una app de autenticación vinculada.`,
+          },
+        ]);
       } catch (error) {
         return rechazo(
           "correo",
           error instanceof ErrorApi
             ? error.message
-            : "No pudimos enviar el código de verificación. Intenta de nuevo.",
+            : "No pudimos comprobar tu app de autenticación. Intenta de nuevo.",
+        );
+      }
+    }
+
+    case "enrolamiento": {
+      if (!datos.ci) {
+        return bloqueo("Perdí tu cédula. Empecemos de nuevo.");
+      }
+
+      const codigoEnrolamiento = texto
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
+
+      if (codigoEnrolamiento.length !== MAX_LONGITUD.enrolamiento) {
+        return rechazo(
+          "enrolamiento",
+          "El código de enrolamiento tiene 10 caracteres. Revísalo o pídelo de nuevo al administrador.",
+        );
+      }
+
+      try {
+        const qr = await postJson<{
+          qr: string;
+          secreto: string;
+          cuenta: string;
+          emisor: string;
+        }>("/api/verificacion/enrolar", {
+          ci: datos.ci,
+          codigoEnrolamiento,
+        });
+
+        datos.enrolamientoPendiente = true;
+
+        return {
+          mensajes: [
+            {
+              texto:
+                "Escanea este QR con Google Authenticator, Authy, 1Password o Microsoft Authenticator.",
+              qr: qr.qr,
+            },
+            {
+              texto: `¿No puedes escanear? Ingresa este secreto en la app: ${qr.secreto}`,
+            },
+            { texto: PREGUNTAS.verificacion },
+          ],
+          paso: "verificacion",
+        };
+      } catch (error) {
+        return rechazo(
+          "enrolamiento",
+          error instanceof ErrorApi
+            ? error.message
+            : "No pudimos validar el código de enrolamiento. Intenta de nuevo.",
         );
       }
     }
@@ -279,59 +336,30 @@ async function procesar(
     case "verificacion": {
       const { correo } = datos;
 
-      if (!correo) {
+      if (!correo || !datos.ci) {
         return bloqueo(
           "Perdí los datos de la verificación. Empecemos de nuevo.",
         );
       }
 
-      if (COMANDO_REENVIAR.has(normalizarTexto(texto))) {
-        try {
-          const resultado = await postJson<{ codigoDemo?: string }>(
-            "/api/verificacion/solicitar",
-            { correo },
-          );
-
-          const mensajes: ContenidoBot[] = [
-            { texto: `Te enviamos un nuevo código a ${correo}.` },
-          ];
-
-          if (resultado.codigoDemo) {
-            mensajes.push({
-              texto: `Código de prueba: ${resultado.codigoDemo}.`,
-            });
-          }
-
-          return {
-            mensajes: [...mensajes, { texto: PREGUNTAS.verificacion }],
-            paso: "verificacion",
-            codigoDemo: resultado.codigoDemo,
-          };
-        } catch (error) {
-          return rechazo(
-            "verificacion",
-            error instanceof ErrorApi
-              ? error.message
-              : "No pudimos reenviar el código. Intenta de nuevo.",
-          );
-        }
-      }
-
       if (!/^\d{6}$/.test(texto.trim())) {
         return rechazo(
           "verificacion",
-          "El código debe tener exactamente 6 dígitos. Escríbelo o pulsa «Reenviar código».",
+          "El código debe tener exactamente 6 dígitos. Abre tu app de autenticación y escríbelo.",
         );
       }
 
       try {
         const { token } = await postJson<{ token: string }>(
-          "/api/verificacion/validar",
+          datos.enrolamientoPendiente
+            ? "/api/verificacion/confirmar"
+            : "/api/verificacion/validar",
           { correo, codigo: texto.trim(), ci: datos.ci },
         );
 
         datos.verificacionToken = token;
-        return avanzar("nrc", [{ texto: "Correo verificado correctamente." }]);
+        datos.enrolamientoPendiente = false;
+        return avanzar("nrc", [{ texto: "Identidad verificada correctamente." }]);
       } catch (error) {
         return rechazo(
           "verificacion",
@@ -507,6 +535,16 @@ const MensajeBurbuja = memo(function MensajeBurbuja({
         }`}
       >
         <span className="sr-only">{esBot ? "Asistente: " : "Tú: "}</span>
+        {mensaje.qr && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={mensaje.qr}
+            alt="Código QR para vincular la app de autenticación"
+            width={180}
+            height={180}
+            className="mb-2 rounded-lg bg-white p-1.5"
+          />
+        )}
         <p className="whitespace-pre-wrap break-words">{mensaje.texto}</p>
         {mensaje.ticket && (
           <p className="mt-2 select-all rounded-lg bg-indigo-50 dark:bg-indigo-500/15 px-3 py-2 text-center font-mono text-base font-bold tracking-wider text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-100 dark:ring-indigo-500/30">
@@ -544,8 +582,6 @@ interface CompositorProps {
   indice: MateriaIndexada[];
   /** Opciones pendientes de desambiguar (NRC repetido). */
   opciones: Materia[];
-  /** Código de prueba devuelto por la API (modo desarrollo). */
-  codigoDemo: string | null;
   entradaRef: RefObject<HTMLTextAreaElement | null>;
   onEnviar: (texto: string, vista?: string) => void;
 }
@@ -560,7 +596,6 @@ function Compositor({
   deshabilitado,
   indice,
   opciones,
-  codigoDemo,
   entradaRef,
   onEnviar,
 }: CompositorProps) {
@@ -575,12 +610,27 @@ function Compositor({
   }, [paso, indice, opciones, texto]);
 
   function cambiar(valor: string) {
-    const soloDigitos = paso === "ci" || paso === "verificacion";
-    setTexto(
-      soloDigitos
-        ? valor.replace(/\D/g, "").slice(0, MAX_LONGITUD[paso])
-        : valor,
-    );
+    if (paso === "ci") {
+      setTexto(valor.replace(/\D/g, "").slice(0, MAX_LONGITUD[paso]));
+      return;
+    }
+
+    if (paso === "verificacion") {
+      setTexto(valor.replace(/\D/g, "").slice(0, MAX_LONGITUD[paso]));
+      return;
+    }
+
+    if (paso === "enrolamiento") {
+      setTexto(
+        valor
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "")
+          .slice(0, MAX_LONGITUD[paso]),
+      );
+      return;
+    }
+
+    setTexto(valor);
   }
 
   function enviar(valor: string = texto, vista?: string) {
@@ -618,29 +668,6 @@ function Compositor({
               {tipo.label}
             </button>
           ))}
-        </div>
-      )}
-
-      {paso === "verificacion" && (
-        <div className="flex flex-wrap gap-2 px-4 pt-3 sm:px-6">
-          {codigoDemo && (
-            <button
-              type="button"
-              disabled={bloqueado}
-              onClick={() => enviar(codigoDemo, codigoDemo)}
-              className={CLASE_CHIP}
-            >
-              Usar código {codigoDemo}
-            </button>
-          )}
-          <button
-            type="button"
-            disabled={bloqueado}
-            onClick={() => enviar("reenviar", "Reenviar código")}
-            className={CLASE_CHIP}
-          >
-            Reenviar código
-          </button>
         </div>
       )}
 
@@ -748,7 +775,6 @@ export function ChatbotPanel({
   const [paso, setPaso] = useState<Paso>("ci");
   const [ocupado, setOcupado] = useState(false);
   const [opciones, setOpciones] = useState<Materia[]>([]);
-  const [codigoDemo, setCodigoDemo] = useState<string | null>(null);
 
   // Estado que no se pinta vive en refs: evita renders y cierres obsoletos.
   const datosRef = useRef<Datos>({});
@@ -818,7 +844,6 @@ export function ChatbotPanel({
           pasoRef.current = respuesta.paso;
           setPaso(respuesta.paso);
           setOpciones(respuesta.opciones ?? []);
-          setCodigoDemo(respuesta.codigoDemo ?? null);
           agregar(
             respuesta.mensajes.map((mensaje) => ({
               autor: "bot" as const,
@@ -858,7 +883,6 @@ export function ChatbotPanel({
     interactuado.current = false;
     setPaso("ci");
     setOpciones([]);
-    setCodigoDemo(null);
     setMensajes(MENSAJES_INICIALES);
   }, [mensajes.length]);
 
@@ -927,7 +951,6 @@ export function ChatbotPanel({
         deshabilitado={catalogoVacio}
         indice={indice}
         opciones={opciones}
-        codigoDemo={codigoDemo}
         entradaRef={entradaRef}
         onEnviar={enviar}
       />

@@ -1,18 +1,22 @@
 export const CONFIG = {
   maxReportesPorDia: 10,
   ventanaDuplicadosHoras: 24,
-  /** Minutos que vive un código de 6 dígitos. */
-  duracionCodigoVerificacionMinutos: 10,
   /** Minutos que vive el token firmado que autoriza crear el reporte. */
   duracionTokenVerificacionMinutos: 20,
-  /** Espera mínima entre solicitudes de código para un mismo correo. */
-  segundosEntreSolicitudes: 60,
-  /** Solicitudes de código por correo en una hora. */
-  maxSolicitudesCodigoPorHora: 5,
-  /** Solicitudes de código por IP en una hora. */
-  maxSolicitudesCodigoPorIpHora: 20,
-  /** Intentos permitidos para acertar un mismo código. */
-  maxIntentosCodigo: 5,
+  /** Minutos que vive el token previo al segundo factor de /admin. */
+  duracionTokenPreAuthAdminMinutos: 10,
+  /** TOTP: 6 dígitos cada 30 s, con un paso de tolerancia de reloj. */
+  totpPeriodoSegundos: 30,
+  totpDigitos: 6,
+  totpVentanaPasos: 1,
+  /**
+   * Minutos de bloqueo que se muestran al usuario. La base aplica el bloqueo
+   * (5 intentos fallidos) de forma atómica en `registrar_fallo_totp`; este
+   * valor solo debe coincidir con el intervalo definido allí.
+   */
+  bloqueoTotpMinutos: 15,
+  /** Horas que vive un código de enrolamiento entregado por un admin. */
+  duracionCodigoEnrolamientoHoras: 24,
   /** Consultas fallidas (ticket + cédula) permitidas por IP en la ventana. */
   maxConsultasFallidasPorIp: 10,
   /**

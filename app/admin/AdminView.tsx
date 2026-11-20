@@ -728,7 +728,142 @@ export function AdminView({
       </ul>
 
       {esSuper && <PanelAdministradores miUserId={miUserId} onSesionCaducada={irAlLogin} />}
+      <PanelEnrolamientoEstudiantes onSesionCaducada={irAlLogin} />
     </main>
+  );
+}
+
+// ── Códigos de enrolamiento para estudiantes ────────────────────────────────
+
+function PanelEnrolamientoEstudiantes({
+  onSesionCaducada,
+}: {
+  onSesionCaducada: () => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [ci, setCi] = useState("");
+  const [generando, setGenerando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resultado, setResultado] = useState<{
+    codigo: string;
+    expiraEn: string;
+  } | null>(null);
+
+  async function generar(event: FormEvent) {
+    event.preventDefault();
+    if (generando) return;
+
+    setGenerando(true);
+    setError(null);
+    setResultado(null);
+
+    try {
+      const respuesta = await fetch("/api/admin/estudiantes/enrolamiento", {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ ci }),
+      });
+
+      if (respuesta.status === 401) {
+        onSesionCaducada();
+        return;
+      }
+
+      const datos = await leerRespuesta(respuesta);
+      if (!datos.ok) throw new Error(datos.mensaje);
+
+      setResultado({
+        codigo: String(datos.codigo ?? ""),
+        expiraEn: String(datos.expiraEn ?? ""),
+      });
+    } catch (fallo) {
+      setError(
+        fallo instanceof Error && fallo.message
+          ? fallo.message
+          : "No pudimos generar el código de enrolamiento.",
+      );
+    } finally {
+      setGenerando(false);
+    }
+  }
+
+  return (
+    <section className="mt-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
+      <button
+        type="button"
+        onClick={() => setAbierto((valor) => !valor)}
+        aria-expanded={abierto}
+        className="flex w-full items-center justify-between rounded-lg text-left text-sm font-semibold text-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-200"
+      >
+        Códigos de enrolamiento para estudiantes
+        <span aria-hidden="true">{abierto ? "−" : "+"}</span>
+      </button>
+
+      {abierto && (
+        <div className="mt-4 space-y-3">
+          <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
+            Genera un código de un solo uso para que un estudiante vincule su app
+            de autenticación. También sirve para reiniciar la app si cambió de
+            teléfono. El código anterior de esa cédula queda invalidado.
+          </p>
+
+          <form onSubmit={generar} className="flex flex-wrap items-end gap-3">
+            <div className="min-w-0 flex-1">
+              <label
+                htmlFor="enrolamiento-ci"
+                className="block text-xs font-medium text-slate-600 dark:text-slate-400"
+              >
+                Cédula del estudiante
+              </label>
+              <input
+                id="enrolamiento-ci"
+                type="text"
+                inputMode="numeric"
+                maxLength={8}
+                required
+                value={ci}
+                onChange={(event) =>
+                  setCi(event.target.value.replace(/\D/g, "").slice(0, 8))
+                }
+                placeholder="Ej. 12345678"
+                className={`${campo} mt-1 w-full`}
+              />
+            </div>
+            <button type="submit" disabled={generando} className={botonPrimario}>
+              {generando ? "Generando..." : "Generar código"}
+            </button>
+          </form>
+
+          {error && (
+            <p
+              role="alert"
+              className="rounded-lg border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-300"
+            >
+              {error}
+            </p>
+          )}
+
+          {resultado && (
+            <div
+              role="status"
+              className="rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-3"
+            >
+              <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                Código para la cédula {ci}
+              </p>
+              <p className="mt-1 select-all break-all font-mono text-lg font-bold tracking-[0.2em] text-emerald-900 dark:text-emerald-200">
+                {resultado.codigo}
+              </p>
+              <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+                Vence el{" "}
+                {formatoFecha.format(new Date(resultado.expiraEn))}. Compártelo
+                por un canal seguro; no se volverá a mostrar.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -741,6 +876,7 @@ interface AdministradorFila {
   email: string;
   rol: Rol;
   creadoEn: string;
+  totpActivo: boolean;
 }
 
 function PanelAdministradores({
@@ -886,6 +1022,48 @@ function PanelAdministradores({
     }
   }
 
+  async function reiniciarApp(fila: AdministradorFila) {
+    if (
+      enviando ||
+      !window.confirm(
+        `¿Reiniciar la app de autenticación de ${fila.email}? Deberá vincularla de nuevo en su próximo inicio de sesión.`,
+      )
+    ) {
+      return;
+    }
+
+    setEnviando(true);
+    setError(null);
+    setAviso(null);
+
+    try {
+      const respuesta = await fetch("/api/admin/totp/reiniciar", {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ userId: fila.userId }),
+      });
+
+      if (respuesta.status === 401) {
+        onSesionCaducada();
+        return;
+      }
+
+      const datos = await leerRespuesta(respuesta);
+      if (!datos.ok) throw new Error(datos.mensaje);
+
+      setAviso(`Se reinició la app de ${fila.email}. Debe vincularla al entrar.`);
+      await cargar();
+    } catch (fallo) {
+      setError(
+        fallo instanceof Error && fallo.message
+          ? fallo.message
+          : "No pudimos reiniciar la app de autenticación.",
+      );
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   return (
     <section className="mt-10 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
       <button type="button" onClick={() => setAbierto((v) => !v)} aria-expanded={abierto}
@@ -913,20 +1091,30 @@ function PanelAdministradores({
                   <span className={`ml-2 rounded-full px-2 py-0.5 text-xs font-semibold ${fila.rol === "super" ? "bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"}`}>
                     {fila.rol === "super" ? "Super admin" : "Admin"}
                   </span>
-                </span>
-                {fila.userId !== miUserId && (
-                  <span className="flex flex-wrap gap-2">
-                    <button type="button" disabled={enviando}
-                      onClick={() => void cambiarRol(fila, fila.rol === "super" ? "admin" : "super")}
-                      className="min-h-9 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-300 dark:hover:bg-slate-800 disabled:opacity-50">
-                      {fila.rol === "super" ? "Quitar super" : "Hacer super"}
-                    </button>
-                    <button type="button" disabled={enviando} onClick={() => void quitar(fila)}
-                      className="min-h-9 rounded-lg border border-rose-200 dark:border-rose-500/30 px-3 py-1.5 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 dark:text-rose-300 dark:hover:bg-rose-500/15 disabled:opacity-50">
-                      Quitar acceso
-                    </button>
+                  <span className={`ml-2 rounded-full px-2 py-0.5 text-xs font-semibold ${fila.totpActivo ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"}`}>
+                    {fila.totpActivo ? "App vinculada" : "Sin app"}
                   </span>
-                )}
+                </span>
+                <span className="flex flex-wrap gap-2">
+                  <button type="button" disabled={enviando}
+                    onClick={() => void reiniciarApp(fila)}
+                    className="min-h-9 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-300 dark:hover:bg-slate-800 disabled:opacity-50">
+                    Reiniciar app
+                  </button>
+                  {fila.userId !== miUserId && (
+                    <>
+                      <button type="button" disabled={enviando}
+                        onClick={() => void cambiarRol(fila, fila.rol === "super" ? "admin" : "super")}
+                        className="min-h-9 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-300 dark:hover:bg-slate-800 disabled:opacity-50">
+                        {fila.rol === "super" ? "Quitar super" : "Hacer super"}
+                      </button>
+                      <button type="button" disabled={enviando} onClick={() => void quitar(fila)}
+                        className="min-h-9 rounded-lg border border-rose-200 dark:border-rose-500/30 px-3 py-1.5 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 dark:text-rose-300 dark:hover:bg-rose-500/15 disabled:opacity-50">
+                        Quitar acceso
+                      </button>
+                    </>
+                  )}
+                </span>
               </li>
             ))}
           </ul>

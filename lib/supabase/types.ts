@@ -92,39 +92,6 @@ export type Database = {
         }
         Relationships: []
       }
-      codigos_verificacion: {
-        Row: {
-          codigo_hash: string
-          consumido_en: string | null
-          correo: string
-          creado_en: string
-          expira_en: string
-          id: string
-          intentos: number
-          ip_hash: string | null
-        }
-        Insert: {
-          codigo_hash: string
-          consumido_en?: string | null
-          correo: string
-          creado_en?: string
-          expira_en: string
-          id?: string
-          intentos?: number
-          ip_hash?: string | null
-        }
-        Update: {
-          codigo_hash?: string
-          consumido_en?: string | null
-          correo?: string
-          creado_en?: string
-          expira_en?: string
-          id?: string
-          intentos?: number
-          ip_hash?: string | null
-        }
-        Relationships: []
-      }
       consulta_intentos: {
         Row: {
           ci: string | null
@@ -242,6 +209,72 @@ export type Database = {
         }
         Relationships: []
       }
+      totp_credenciales: {
+        Row: {
+          actualizado_en: string
+          bloqueado_hasta: string | null
+          confirmado_en: string | null
+          creado_en: string
+          intentos_fallidos: number
+          secreto_cifrado: string
+          sujeto: string
+          tipo: "admin" | "estudiante"
+          ultimo_paso: number
+        }
+        Insert: {
+          actualizado_en?: string
+          bloqueado_hasta?: string | null
+          confirmado_en?: string | null
+          creado_en?: string
+          intentos_fallidos?: number
+          secreto_cifrado: string
+          sujeto: string
+          tipo: "admin" | "estudiante"
+          ultimo_paso?: number
+        }
+        Update: {
+          actualizado_en?: string
+          bloqueado_hasta?: string | null
+          confirmado_en?: string | null
+          creado_en?: string
+          intentos_fallidos?: number
+          secreto_cifrado?: string
+          sujeto?: string
+          tipo?: "admin" | "estudiante"
+          ultimo_paso?: number
+        }
+        Relationships: []
+      }
+      totp_enrolamiento: {
+        Row: {
+          ci: string
+          codigo_hash: string
+          creado_en: string
+          creado_por: string
+          expira_en: string
+          id: string
+          usado_en: string | null
+        }
+        Insert: {
+          ci: string
+          codigo_hash: string
+          creado_en?: string
+          creado_por: string
+          expira_en: string
+          id?: string
+          usado_en?: string | null
+        }
+        Update: {
+          ci?: string
+          codigo_hash?: string
+          creado_en?: string
+          creado_por?: string
+          expira_en?: string
+          id?: string
+          usado_en?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       reportes_con_llegada: {
@@ -271,7 +304,15 @@ export type Database = {
         }
         Returns: number
       }
-      consumir_codigo: { Args: { p_id: string }; Returns: boolean }
+      confirmar_totp: {
+        Args: { p_paso: number; p_sujeto: string; p_tipo: string }
+        Returns: boolean
+      }
+      consumir_enrolamiento: { Args: { p_ci: string }; Returns: undefined }
+      crear_totp_pendiente: {
+        Args: { p_secreto: string; p_sujeto: string; p_tipo: string }
+        Returns: boolean
+      }
       crear_reporte: {
         Args: {
           p_ci: string
@@ -287,8 +328,28 @@ export type Database = {
         }
         Returns: Json
       }
+      enrolar_estudiante: {
+        Args: { p_ci: string; p_codigo_hash: string; p_secreto: string }
+        Returns: Json
+      }
+      generar_codigo_enrolamiento: {
+        Args: {
+          p_ci: string
+          p_codigo_hash: string
+          p_creado_por: string
+          p_expira_en: string
+        }
+        Returns: string
+      }
       limpiar_codigos_vencidos: { Args: never; Returns: undefined }
-      registrar_intento_codigo: { Args: { p_id: string }; Returns: number }
+      marcar_paso_totp: {
+        Args: { p_paso: number; p_sujeto: string; p_tipo: string }
+        Returns: boolean
+      }
+      registrar_fallo_totp: {
+        Args: { p_sujeto: string; p_tipo: string }
+        Returns: Json
+      }
     }
     Enums: {
       estado_reporte: "pendiente" | "en-revision" | "resuelto"
