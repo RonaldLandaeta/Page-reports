@@ -1,6 +1,6 @@
 /**
  * Tipos generados a partir del esquema final de Supabase (migraciones
- * 0001–0007). Si cambias una migración, actualiza este archivo y ejecuta
+ * 0001–0015). Si cambias una migración, actualiza este archivo y ejecuta
  * `npm run typecheck`.
  *
  * No edites a mano los tipos `Row`/`Insert`/`Update` sin comprobar que el SQL

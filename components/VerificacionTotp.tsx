@@ -228,7 +228,7 @@ export function VerificacionTotp({
             ? "Tu enrolamiento quedó a medias. Vuelve a escribir el código que te entregó el administrador."
             : vista === "reiniciar"
               ? "Por seguridad, un administrador debe autorizar el reinicio. Pídele un código de reinicio para tu cédula y escríbelo aquí."
-              : "Para comprobar tu identidad necesitas una app de autenticación. Pide a un administrador un código de enrolamiento de un solo uso."}
+              : "Para comprobar tu identidad necesitas una app de autenticación. Pide a un administrador un código de enrolamiento."}
         </p>
 
         <div className="mt-2.5 flex gap-2">

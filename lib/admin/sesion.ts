@@ -38,7 +38,7 @@ export function esSuperAdmin(admin: Pick<AdminActual, "rol">): boolean {
   return admin.rol === "super";
 }
 
-export type ResultadoAutenticacion =
+type ResultadoAutenticacion =
   | { ok: true; admin: AdminActual }
   | { ok: false; motivo: "credenciales" | "sin_permiso" };
 
@@ -55,7 +55,7 @@ interface CargaSesion {
  * Duración EXACTA de la sesión (no se renueva sola): 2 h por defecto y como
  * máximo. ADMIN_SESION_HORAS solo puede acortarla (mínimo 15 min).
  */
-export function duracionSesionSegundos(): number {
+function duracionSesionSegundos(): number {
   const bruto = Number((process.env.ADMIN_SESION_HORAS ?? "").trim());
   const horas =
     Number.isFinite(bruto) && bruto > 0

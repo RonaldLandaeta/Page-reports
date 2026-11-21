@@ -1,17 +1,14 @@
 import "server-only";
 
 import { CONFIG } from "@/lib/config";
-import {
-  ErrorVerificacion,
-  type CodigoErrorVerificacion,
-} from "@/lib/errores-verificacion";
+import { ErrorVerificacion } from "@/lib/errores-verificacion";
 import { obtenerSupabaseAdmin } from "@/lib/supabase/admin";
 import { descifrarSecreto, verificarCodigoTotp } from "@/lib/totp";
 
-export type TipoCredencial = "estudiante" | "admin";
+type TipoCredencial = "estudiante" | "admin";
 export type EstadoCredencial = "activo" | "pendiente" | "sin_credencial";
 
-export interface CredencialTotp {
+interface CredencialTotp {
   tipo: TipoCredencial;
   sujeto: string;
   secretoCifrado: string;
@@ -25,7 +22,7 @@ function errorInterno(mensaje = "No pudimos comprobar la app de autenticación."
   return new ErrorVerificacion("interno", mensaje, 500);
 }
 
-export async function leerCredencialTotp(
+async function leerCredencialTotp(
   tipo: TipoCredencial,
   sujeto: string,
 ): Promise<CredencialTotp | null> {
@@ -253,10 +250,3 @@ export async function confirmarCredencialTotp(
 
   await verificarYMarcar(credencial, codigo, true);
 }
-
-/** Código interno para diferenciar los errores que la API debe mostrar. */
-export function esErrorCredencial(error: unknown): error is ErrorVerificacion {
-  return error instanceof ErrorVerificacion;
-}
-
-export type { CodigoErrorVerificacion };

@@ -280,7 +280,7 @@ no se expone el estado interno del proyecto.
 > `tipo_error_detalle` inexistentes), de tipo (`estado`/`tipo_error` como
 > texto en vez de enum) o de función (`crear_reporte` inexistente), ejecuta
 > `supabase/setup.sql` completo o las migraciones pendientes (la última es
-> `0014_totp.sql`).
+> `0015_enrolamiento_lote.sql`).
 
 ### Comprobaciones en Supabase
 
@@ -303,6 +303,9 @@ where proname in (
   'marcar_paso_totp',
   'registrar_fallo_totp',
   'generar_codigo_enrolamiento',
+  'generar_codigo_lote',
+  'enrolar_estudiante',
+  'consumir_enrolamiento',
   'cambiar_estado_reporte',
   'crear_reporte',
   'limpiar_codigos_vencidos'

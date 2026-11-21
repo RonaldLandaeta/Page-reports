@@ -24,7 +24,7 @@ export const LONGITUD_CODIGO_ENROLAMIENTO = 10;
 const BYTES_SECRETO = 20;
 
 /** Codifica bytes en base32 sin relleno (formato de las apps TOTP). */
-export function codificarBase32(bytes: Buffer): string {
+function codificarBase32(bytes: Buffer): string {
   let bits = 0;
   let valor = 0;
   let salida = "";
@@ -47,7 +47,7 @@ export function codificarBase32(bytes: Buffer): string {
 }
 
 /** Decodifica base32 ignorando espacios, guiones y relleno `=`. */
-export function decodificarBase32(texto: string): Buffer {
+function decodificarBase32(texto: string): Buffer {
   const limpio = texto.toUpperCase().replace(/[\s-]/g, "").replace(/=+$/, "");
   let bits = 0;
   let valor = 0;
@@ -77,7 +77,7 @@ export function generarSecretoTotp(): string {
 }
 
 /** Código de 6 dígitos para un paso concreto (epoch / 30 s). */
-export function codigoTotp(secretoBase32: string, paso: number): string {
+function codigoTotp(secretoBase32: string, paso: number): string {
   const contador = Buffer.alloc(8);
   contador.writeUInt32BE(Math.floor(paso / 2 ** 32), 0);
   contador.writeUInt32BE(paso >>> 0, 4);
@@ -96,7 +96,7 @@ export function codigoTotp(secretoBase32: string, paso: number): string {
   return String(binario % 1_000_000).padStart(6, "0");
 }
 
-export function pasoActualTotp(periodo = 30): number {
+function pasoActualTotp(periodo = 30): number {
   return Math.floor(Date.now() / 1000 / periodo);
 }
 

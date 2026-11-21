@@ -3,10 +3,7 @@ import "server-only";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { CONFIG } from "@/lib/config";
-import {
-  ErrorVerificacion,
-  codigoApiDeError,
-} from "@/lib/errores-verificacion";
+import { ErrorVerificacion } from "@/lib/errores-verificacion";
 import { secretoVerificacion } from "@/lib/secreto";
 import { obtenerSupabaseAdmin } from "@/lib/supabase/admin";
 import {
@@ -31,10 +28,7 @@ import {
   mensajeCorreoInstitucional,
 } from "@/lib/validaciones";
 
-export { ErrorVerificacion, codigoApiDeError };
-export type { CodigoErrorVerificacion } from "@/lib/errores-verificacion";
-
-export const EMISOR_TOTP = "Reportes Horarios UCAB";
+const EMISOR_TOTP = "Reportes Horarios UCAB";
 
 function firmarToken(correo: string, ci: string): string {
   const payload = {
@@ -392,11 +386,4 @@ export async function generarEnrolamientoLote(
   }
 
   return { codigo, expiraEn, maxCedulas: cantidad };
-}
-
-export async function estadoEstudiante(
-  ci: string,
-): Promise<EstadoCredencial> {
-  exigirCedula(ci);
-  return estadoCredencialTotp("estudiante", ci);
 }

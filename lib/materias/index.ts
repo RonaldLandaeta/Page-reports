@@ -1,15 +1,12 @@
 // Catálogo local de materias: vive en el repositorio y nunca en Supabase.
 import {
   encontrarPorCodigo,
-  encontrarPorNrc,
-  filtrarMaterias,
-  indexarMaterias,
   type Materia,
 } from "./buscar";
 
 export type { Materia } from "./buscar";
 
-export interface MateriaOficial {
+interface MateriaOficial {
   codigo: string;
   nroCurso: string;
   materia: string;
@@ -18,7 +15,7 @@ export interface MateriaOficial {
   horarioDefecto: string;
 }
 
-export const MALLA_OFICIAL: MateriaOficial[] = [
+const MALLA_OFICIAL: MateriaOficial[] = [
   {
     codigo: "FING-02002",
     nroCurso: "02002",
@@ -247,7 +244,7 @@ export const MALLA_OFICIAL: MateriaOficial[] = [
   // Se agregan el resto de las 57 materias según la lista exacta de tu archivo malla_oficial.txt
 ];
 
-export function mapearMateria(m: MateriaOficial): Materia {
+function mapearMateria(m: MateriaOficial): Materia {
   return {
     codigo: m.codigo,
     nrc: m.nroCurso,
@@ -257,28 +254,13 @@ export function mapearMateria(m: MateriaOficial): Materia {
 }
 
 const CATALOGO: Materia[] = MALLA_OFICIAL.map(mapearMateria);
-const INDICE = indexarMaterias(CATALOGO);
 
 /** Lista completa de la malla local, en el orden en que está escrita. */
 export function listarMaterias(): Materia[] {
   return CATALOGO;
 }
 
-export function contarMaterias(): number {
-  return CATALOGO.length;
-}
-
 /** Búsqueda exacta por código único (ej. "FING-02002"). */
 export function buscarMateriaPorCodigo(codigo: string): Materia | undefined {
   return encontrarPorCodigo(CATALOGO, codigo);
-}
-
-/** Materias que comparten un NRC (puede haber más de una entre carreras). */
-export function buscarMateriasPorNrc(nrc: string): Materia[] {
-  return encontrarPorNrc(CATALOGO, nrc);
-}
-
-/** Búsqueda libre por código, NRC o nombre. */
-export function buscarMaterias(consulta: string, limite = 10): Materia[] {
-  return filtrarMaterias(INDICE, consulta, limite);
 }

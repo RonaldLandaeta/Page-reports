@@ -65,14 +65,6 @@ export function encontrarPorCodigo(
   return lista.find((materia) => normalizarTexto(materia.codigo) === buscado);
 }
 
-/** Todas las materias que comparten ese NRC (puede haber varias). */
-export function encontrarPorNrc(lista: Materia[], nrc: string): Materia[] {
-  const buscado = normalizarTexto(nrc);
-  if (!buscado) return [];
-
-  return lista.filter((materia) => normalizarTexto(materia.nrc) === buscado);
-}
-
 /**
  * Busca por código, NRC o nombre (parcial, sin tildes). Las coincidencias
  * exactas de código o NRC van primero. Sin consulta devuelve las primeras.

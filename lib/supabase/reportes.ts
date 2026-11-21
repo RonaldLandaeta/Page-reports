@@ -14,8 +14,6 @@ import type {
   TipoError,
 } from "@/lib/types";
 
-export type { FilaReporteDb };
-
 /** Columnas que puede ver un administrador (nunca se envían secretos). */
 export const CAMPOS_PUBLICOS =
   "id,ticket,ci,nombre,correo,perfil,nrc,materia_codigo,materia_nombre,tipo_error,tipo_error_detalle,motivo,estado,creado_en,actualizado_en" as const;
