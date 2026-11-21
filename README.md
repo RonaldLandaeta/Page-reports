@@ -395,3 +395,9 @@ completo. Es idempotente.
   reporte ya quedó registrado y solo se pierde la notificación.
 - La consola JSON muestra cédula y motivo: solo existe en desarrollo y en
   producción siempre queda apagada.
+
+### Endurecimiento de la base (migración 0016)
+
+- `supabase/migrations/0016_endurecimiento.sql`: quita a `anon`, `authenticated` y `PUBLIC` el acceso al esquema `public`, fija `search_path = public, pg_temp` en todas las funciones `SECURITY DEFINER`, pone la vista de llegada en `security_invoker`, y activa RLS automáticamente en toda tabla nueva.
+- `supabase/auditoria_seguridad.sql`: consultas de solo lectura para el SQL Editor. Todas deben devolver 0 filas. Córrela después de cada migración.
+- `npm run db:test` prueba todo contra Postgres real (escenario 5).

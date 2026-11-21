@@ -931,4 +931,100 @@ async function aplicar(db, archivos) {
   await db.close();
 }
 
+// ── Escenario 5: 0016 endurece una base con todo lo anterior aplicado ──────
+{
+  console.log("\n[5] 0016: endurecimiento (defensa en profundidad)");
+  const db = new PGlite();
+  await prepararRoles(db);
+  await db.exec(await leer(path.join(raiz, "supabase", "setup.sql")));
+
+  // Alguien deja una función SECURITY DEFINER sin search_path y la abre.
+  await db.exec(`
+    create function public.funcion_floja() returns int
+      language sql security definer as $$ select 1 $$;
+    grant execute on function public.funcion_floja() to anon;
+    grant usage on schema public to anon, authenticated;
+  `);
+
+  await aplicar(db, ["0016_endurecimiento.sql"]);
+  await aplicar(db, ["0016_endurecimiento.sql"]); // idempotente
+
+  const escalar = async (sql, params = []) =>
+    (await db.query(sql, params)).rows[0].v;
+
+  afirmar(
+    !(await escalar(`select has_schema_privilege('anon', 'public', 'usage') as v`)) &&
+      !(await escalar(`select has_schema_privilege('authenticated', 'public', 'usage') as v`)),
+    "anon/authenticated ya no tienen USAGE sobre public",
+  );
+  afirmar(
+    await escalar(`select has_schema_privilege('service_role', 'public', 'usage') as v`),
+    "service_role conserva USAGE sobre public",
+  );
+  afirmar(
+    !(await escalar(`select has_function_privilege('anon', 'public.funcion_floja()', 'execute') as v`)),
+    "se retira EXECUTE a anon en funciones abiertas a mano",
+  );
+  afirmar(
+    (await escalar(
+      `select count(*)::int as v from pg_proc p
+         join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.prosecdef
+          and not exists (select 1 from unnest(coalesce(p.proconfig,'{}')) c
+                           where c like 'search_path=public, pg_temp')`,
+    )) === 0,
+    "todas las funciones SECURITY DEFINER fijan search_path = public, pg_temp",
+  );
+  afirmar(
+    await escalar(
+      `select coalesce((select option_value = 'true'
+                          from pg_options_to_table(c.reloptions)
+                         where option_name = 'security_invoker'), false) as v
+         from pg_class c where c.relname = 'reportes_con_llegada'`,
+    ),
+    "reportes_con_llegada usa security_invoker",
+  );
+  afirmar(
+    await escalar(`select has_table_privilege('service_role', 'public.reportes_con_llegada', 'select') as v`) &&
+      await escalar(`select has_table_privilege('service_role', 'public.reportes', 'insert') as v`),
+    "service_role sigue leyendo la vista y escribiendo reportes",
+  );
+
+  // El event trigger puede no existir en entornos sin privilegio; si está, funciona.
+  const hayTrigger = await escalar(
+    `select exists (select 1 from pg_event_trigger where evtname = 'activar_rls_automatico') as v`,
+  );
+  if (hayTrigger) {
+    await db.exec(`create table public.tabla_nueva_sin_rls (id int)`);
+    afirmar(
+      await escalar(`select relrowsecurity as v from pg_class where relname = 'tabla_nueva_sin_rls'`),
+      "una tabla nueva en public nace con RLS activado",
+    );
+  } else {
+    console.log("  (event trigger no disponible en este entorno; se omite esa comprobación)");
+  }
+
+  // La auditoría de solo lectura no debe reportar nada.
+  const auditoria = await leer(path.join(raiz, "supabase", "auditoria_seguridad.sql"));
+  const consultas = auditoria
+    .split(/;\s*\n/)
+    .map((q) => q.replace(/^\s*--.*$/gm, "").trim())
+    .filter((q) => /^select/i.test(q));
+  let hallazgos = [];
+  for (const q of consultas) hallazgos.push(...(await db.query(q)).rows);
+  // Esperados en esta base de prueba: la función floja se creó a propósito y
+  // aún no hay ningún administrador. Lo demás debe estar limpio.
+  hallazgos = hallazgos.filter(
+    (h) =>
+      h.objeto !== "public.funcion_floja()" &&
+      h.problema !== "no hay ningún super administrador",
+  );
+  afirmar(
+    hallazgos.length === 0,
+    `la auditoría no reporta problemas (hallazgos: ${JSON.stringify(hallazgos)})`,
+  );
+
+  await db.close();
+}
+
 console.log(`\nTodo OK (${comprobaciones} comprobaciones)`);
