@@ -300,7 +300,7 @@ async function aplicar(db, archivos) {
   // 0014: enrolamiento TOTP y defensas contra reutilización y fuerza bruta.
   const codigo = await db.query(`
     select public.generar_codigo_enrolamiento(
-      '12345678', 'hash-enrolamiento', now() + interval '1 day',
+      '12345678', 'hash-enrolamiento', now() + interval '30 minutes',
       'admin@ucab.edu.ve'
     ) as id
   `);
@@ -379,7 +379,7 @@ async function aplicar(db, archivos) {
   // el teléfono: invalida la credencial anterior y permite enrolar otra.
   const reinicio = await db.query(`
     select public.generar_codigo_enrolamiento(
-      '12345678', 'hash-reinicio', now() + interval '1 day',
+      '12345678', 'hash-reinicio', now() + interval '30 minutes',
       'admin@ucab.edu.ve'
     ) as id
   `);
@@ -406,6 +406,133 @@ async function aplicar(db, archivos) {
   afirmar(
     reenroladoTrasReinicio.rows[0].r.ok === true,
     "tras el reinicio se puede enrolar una app nueva",
+  );
+
+  // 0015: un mismo código puede matricular varias cédulas distintas.
+  const codigoLote = await db.query(`
+    select public.generar_codigo_lote(
+      'hash-lote', 2, now() + interval '12 hours', 'admin@ucab.edu.ve'
+    ) as id
+  `);
+  afirmar(
+    Boolean(codigoLote.rows[0].id),
+    "generar_codigo_lote crea el código compartido",
+  );
+
+  let rechazadoLote = false;
+  try {
+    await db.query(`
+      select public.generar_codigo_lote(
+        'hash-lote-invalido', 0, now() + interval '12 hours',
+        'admin@ucab.edu.ve'
+      )
+    `);
+  } catch {
+    rechazadoLote = true;
+  }
+  afirmar(rechazadoLote, "generar_codigo_lote rechaza cantidades fuera de rango");
+
+  const loteUno = await db.query(`
+    select public.enrolar_estudiante(
+      '11111111', 'hash-lote', 'v1.lote-uno'
+    ) as r
+  `);
+  afirmar(
+    loteUno.rows[0].r.ok === true,
+    "el código compartido enrola a la primera cédula",
+  );
+
+  const loteMismo = await db.query(`
+    select public.enrolar_estudiante(
+      '11111111', 'hash-lote', 'v1.lote-uno-otra-vez'
+    ) as r
+  `);
+  afirmar(
+    loteMismo.rows[0].r.ok === true,
+    "la misma cédula puede repetir el canje sin gastar otro cupo",
+  );
+
+  const loteDos = await db.query(`
+    select public.enrolar_estudiante(
+      '22222222', 'hash-lote', 'v1.lote-dos'
+    ) as r
+  `);
+  afirmar(
+    loteDos.rows[0].r.ok === true,
+    "el código compartido enrola hasta la cantidad indicada",
+  );
+
+  const loteAgotado = await db.query(`
+    select public.enrolar_estudiante(
+      '33333333', 'hash-lote', 'v1.lote-tres'
+    ) as r
+  `);
+  afirmar(
+    loteAgotado.rows[0].r.codigo === "agotado",
+    "el código compartido se agota al llegar al máximo de cédulas",
+  );
+
+  const usosLote = await db.query(`
+    select ci
+      from public.totp_enrolamiento_usos
+     where enrolamiento_id = $1
+     order by ci
+  `, [codigoLote.rows[0].id]);
+  afirmar(
+    usosLote.rows.length === 2 &&
+      usosLote.rows[0].ci === "11111111" &&
+      usosLote.rows[1].ci === "22222222",
+    "totp_enrolamiento_usos guarda una fila por cédula distinta",
+  );
+
+  const loteVencido = await db.query(`
+    select public.generar_codigo_lote(
+      'hash-lote-vencido', 5, now() - interval '1 minute',
+      'admin@ucab.edu.ve'
+    ) as id
+  `);
+  const conVencido = await db.query(`
+    select public.enrolar_estudiante(
+      '44444444', 'hash-lote-vencido', 'v1.vencido'
+    ) as r
+  `);
+  afirmar(
+    Boolean(loteVencido.rows[0].id) && conVencido.rows[0].r.codigo === "codigo",
+    "un código compartido vencido ya no enrola",
+  );
+
+  // Confirmar el TOTP consume los códigos individuales, pero no los de lote:
+  // el resto de la clase debe poder seguir usándolos hasta que venza.
+  const loteLargo = await db.query(`
+    select public.generar_codigo_lote(
+      'hash-lote-largo', 3, now() + interval '12 hours', 'admin@ucab.edu.ve'
+    ) as id
+  `);
+  await db.query(`
+    select public.enrolar_estudiante(
+      '55555555', 'hash-lote-largo', 'v1.lote-largo'
+    )
+  `);
+  await db.query(`select public.consumir_enrolamiento('55555555')`);
+  const trasConsumir = await db.query(`
+    select public.enrolar_estudiante(
+      '66666666', 'hash-lote-largo', 'v1.lote-largo-dos'
+    ) as r
+  `);
+  afirmar(
+    Boolean(loteLargo.rows[0].id) && trasConsumir.rows[0].r.ok === true,
+    "consumir_enrolamiento no invalida un código compartido",
+  );
+
+  // Un código de reinicio sigue atado a su cédula.
+  const ajenoAlReinicio = await db.query(`
+    select public.enrolar_estudiante(
+      '99999999', 'hash-reinicio', 'v1.ajeno'
+    ) as r
+  `);
+  afirmar(
+    ajenoAlReinicio.rows[0].r.codigo === "codigo",
+    "un código de reinicio no sirve para otra cédula",
   );
 
   // 0011: número de llegada por cédula sobre todo el histórico.
@@ -675,6 +802,7 @@ async function aplicar(db, archivos) {
     "0012_perfil_alumno.sql",
     "0013_limite_diario.sql",
     "0014_totp.sql",
+    "0015_enrolamiento_lote.sql",
   ]);
 
   // Reproduce lo que había en el proyecto real: permisos por defecto de
@@ -746,6 +874,7 @@ async function aplicar(db, archivos) {
       "administradores",
       "totp_credenciales",
       "totp_enrolamiento",
+      "totp_enrolamiento_usos",
       "admin_intentos",
       "consulta_intentos",
       "cedula_llegadas",

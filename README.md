@@ -56,11 +56,13 @@ Malla curricular ── vive en el repositorio (lib/materias), nunca en Supabase
   `horarioDefecto`. Expone el tipo `Materia` (`codigo`, `nrc`, `nombre`,
   `horario`) y funciones para listar y buscar por código, NRC o nombre.
 - **Verificación con app de autenticación (TOTP)**. Un administrador genera un
-  código de enrolamiento de un solo uso para la cédula; el estudiante lo canjea,
-  escanea el QR y confirma con el primer código de 6 dígitos. Después solo
-  necesita el código de su app para reportar. Si pierde el teléfono, el panel
-  ofrece **«Reiniciar mi app»**: un administrador genera un código de reinicio
-  (que invalida la app anterior) y el estudiante vincula una nueva.
+  código de enrolamiento para la cédula; el estudiante lo canjea, escanea el QR y
+  confirma con el primer código de 6 dígitos. El admin puede crear un código
+  compartido para varias cédulas (por ejemplo, todo un salón) o uno individual
+  para reiniciar una app perdida. Después solo necesita el código de su app para
+  reportar. Si pierde el teléfono, el panel ofrece **«Reiniciar mi app»**: un
+  administrador genera un código de reinicio (que invalida la app anterior) y el
+  estudiante vincula una nueva.
 - **Reglas de negocio en el servidor**:
   - Duplicado con la misma cédula + `materia_codigo` + tipo de error en 24
     horas (así `FING-02002` y `TELE-02002` son reportes distintos).
@@ -151,7 +153,8 @@ Si deseas clonar y probar la aplicación en un entorno local:
 | `POST` | `/api/admin/totp/enrolar`        | Devuelve el QR para el primer inicio de sesión del admin.     |
 | `POST` | `/api/admin/totp/confirmar`      | Confirma el primer TOTP y crea la cookie de sesión.           |
 | `POST` | `/api/admin/totp/validar`        | Valida el TOTP y crea la cookie de sesión.                    |
-| `POST` | `/api/admin/estudiantes/enrolamiento` | Genera un código de enrolamiento para una cédula.        |
+| `POST` | `/api/admin/estudiantes/enrolamiento` | Genera un código de reinicio para una cédula.            |
+| `POST` | `/api/admin/estudiantes/enrolamiento/lote` | Genera un código compartido para N cédulas.         |
 
 Contrato de error:
 
@@ -208,9 +211,11 @@ tipos se ignora).
    dejar el sistema sin ningún super. No hay códigos de respaldo: la
    recuperación es siempre un reinicio por un super.
 5. Cualquier administrador puede generar **códigos de enrolamiento para
-   estudiantes** desde el panel: se introduce la cédula, se entrega el código de
-   un solo uso (24 h) y el estudiante lo canjea escaneando el QR. El mismo
-   mecanismo sirve para reiniciar la app si el estudiante cambió de teléfono.
+   estudiantes** desde el panel. Un código compartido admite la cantidad de
+   cédulas distintas que indique el admin (cada cédula ocupa un solo cupo aunque
+   repita el canje); un código individual reinicia la app de una cédula concreta
+   e invalida la anterior. Todos vencen a las 12 horas y se muestran una sola
+   vez.
 6. Lotes: marca reportes y pásalos de estado juntos. Para descargar (CSV para
    Excel o JSON para app_ingresos) escribe un rango de números de llegada
    (p. ej. `1-10`, que incluye todas las cédulas con llegada 1 a 10) o descarga
@@ -345,8 +350,9 @@ completo. Es idempotente.
   al navegador.
 - Cada código TOTP se acepta una sola vez: `marcar_paso_totp` impide reutilizar
   el mismo paso de 30 s. Cinco fallos bloquean la app 15 minutos.
-- Los códigos de enrolamiento son de un solo uso, se guardan como hash HMAC,
-  vencen a las 24 h y solo los genera un administrador autenticado.
+- Los códigos de enrolamiento se guardan como hash HMAC, vencen a las 12 horas
+  y solo los genera un administrador autenticado. Un código compartido cuenta
+  cédulas distintas (no intentos) y no reinicia credenciales existentes.
 - Los tokens previos al segundo factor de `/admin` viven 10 minutos y solo
   autorizan el enrolamiento o la validación TOTP; no son cookies de sesión.
 - **Solo se acepta el dominio institucional exacto `@est.ucab.edu.ve`** como

@@ -16,7 +16,12 @@ export const CONFIG = {
    */
   bloqueoTotpMinutos: 15,
   /** Horas que vive un código de enrolamiento entregado por un admin. */
-  duracionCodigoEnrolamientoHoras: 24,
+  duracionCodigoEnrolamientoHoras: 12,
+  /**
+   * Máximo de cédulas distintas que puede admitir un código de lote. El admin
+   * elige cuántas necesita; esto solo evita valores absurdos.
+   */
+  maxCedulasPorCodigoEnrolamiento: 10_000,
   /** Consultas fallidas (ticket + cédula) permitidas por IP en la ventana. */
   maxConsultasFallidasPorIp: 10,
   /**

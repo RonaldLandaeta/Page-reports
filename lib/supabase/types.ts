@@ -247,31 +247,55 @@ export type Database = {
       }
       totp_enrolamiento: {
         Row: {
-          ci: string
+          ci: string | null
           codigo_hash: string
           creado_en: string
           creado_por: string
           expira_en: string
           id: string
+          max_usos: number
           usado_en: string | null
         }
         Insert: {
-          ci: string
+          ci?: string | null
           codigo_hash: string
           creado_en?: string
           creado_por: string
           expira_en: string
           id?: string
+          max_usos?: number
           usado_en?: string | null
         }
         Update: {
-          ci?: string
+          ci?: string | null
           codigo_hash?: string
           creado_en?: string
           creado_por?: string
           expira_en?: string
           id?: string
+          max_usos?: number
           usado_en?: string | null
+        }
+        Relationships: []
+      }
+      totp_enrolamiento_usos: {
+        Row: {
+          ci: string
+          creado_en: string
+          enrolamiento_id: string
+          id: number
+        }
+        Insert: {
+          ci: string
+          creado_en?: string
+          enrolamiento_id: string
+          id?: number
+        }
+        Update: {
+          ci?: string
+          creado_en?: string
+          enrolamiento_id?: string
+          id?: number
         }
         Relationships: []
       }
@@ -338,6 +362,15 @@ export type Database = {
           p_codigo_hash: string
           p_creado_por: string
           p_expira_en: string
+        }
+        Returns: string
+      }
+      generar_codigo_lote: {
+        Args: {
+          p_codigo_hash: string
+          p_creado_por: string
+          p_expira_en: string
+          p_max_usos: number
         }
         Returns: string
       }

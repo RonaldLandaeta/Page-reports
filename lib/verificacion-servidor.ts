@@ -306,6 +306,13 @@ export async function validarEstudiante(
 
 // ── API para el panel de administración ─────────────────────────────────────
 
+/** Fecha de vencimiento común a todos los códigos de enrolamiento. */
+function expiracionEnrolamiento(): string {
+  return new Date(
+    Date.now() + CONFIG.duracionCodigoEnrolamientoHoras * 60 * 60 * 1000,
+  ).toISOString();
+}
+
 /** Genera un código de enrolamiento y reinicia la app de esa cédula. */
 export async function generarEnrolamientoEstudiante(
   ci: string,
@@ -314,9 +321,7 @@ export async function generarEnrolamientoEstudiante(
   exigirCedula(ci);
 
   const codigo = generarCodigoEnrolamiento();
-  const expiraEn = new Date(
-    Date.now() + CONFIG.duracionCodigoEnrolamientoHoras * 60 * 60 * 1000,
-  ).toISOString();
+  const expiraEn = expiracionEnrolamiento();
 
   const { error } = await obtenerSupabaseAdmin().rpc(
     "generar_codigo_enrolamiento",
@@ -341,6 +346,52 @@ export async function generarEnrolamientoEstudiante(
   }
 
   return { codigo, expiraEn };
+}
+
+/**
+ * Genera un código compartido para que hasta `cantidad` cédulas distintas se
+ * enrolen dentro de las próximas horas. No reinicia credenciales existentes:
+ * para eso está `generarEnrolamientoEstudiante`.
+ */
+export async function generarEnrolamientoLote(
+  cantidad: number,
+  creadoPor: string,
+): Promise<{ codigo: string; expiraEn: string; maxCedulas: number }> {
+  if (
+    !Number.isInteger(cantidad) ||
+    cantidad < 1 ||
+    cantidad > CONFIG.maxCedulasPorCodigoEnrolamiento
+  ) {
+    throw new ErrorVerificacion(
+      "validacion",
+      `La cantidad debe estar entre 1 y ${CONFIG.maxCedulasPorCodigoEnrolamiento}.`,
+      422,
+    );
+  }
+
+  const codigo = generarCodigoEnrolamiento();
+  const expiraEn = expiracionEnrolamiento();
+
+  const { error } = await obtenerSupabaseAdmin().rpc("generar_codigo_lote", {
+    p_codigo_hash: hashCodigoEnrolamiento(codigo),
+    p_max_usos: cantidad,
+    p_expira_en: expiraEn,
+    p_creado_por: creadoPor.slice(0, 254),
+  });
+
+  if (error) {
+    console.error(
+      "[verificacion] no se pudo generar el código de lote.",
+      error,
+    );
+    throw new ErrorVerificacion(
+      "interno",
+      "No pudimos generar el código de enrolamiento.",
+      500,
+    );
+  }
+
+  return { codigo, expiraEn, maxCedulas: cantidad };
 }
 
 export async function estadoEstudiante(

@@ -9,6 +9,7 @@ import {
   getTipoErrorLabel,
 } from "@/lib/catalogos";
 import { postJson } from "@/lib/api-cliente";
+import { CONFIG } from "@/lib/config";
 import type { EstadoReporte, EventoReporte, Reporte } from "@/lib/types";
 
 import { ChevronDownIcon } from "@/components/icons";
@@ -735,57 +736,139 @@ export function AdminView({
 
 // ── Códigos de enrolamiento para estudiantes ────────────────────────────────
 
+interface CodigoGenerado {
+  codigo: string;
+  expiraEn: string;
+  maxCedulas?: number;
+}
+
+function TarjetaCodigo({
+  titulo,
+  codigo,
+  expiraEn,
+}: {
+  titulo: string;
+  codigo: string;
+  expiraEn: string;
+}) {
+  return (
+    <div
+      role="status"
+      className="rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-3"
+    >
+      <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+        {titulo}
+      </p>
+      <p className="mt-1 select-all break-all font-mono text-lg font-bold tracking-[0.2em] text-emerald-900 dark:text-emerald-200">
+        {codigo}
+      </p>
+      <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+        Vence el {formatoFecha.format(new Date(expiraEn))}. Compártelo por un
+        canal seguro; no se volverá a mostrar.
+      </p>
+    </div>
+  );
+}
+
 function PanelEnrolamientoEstudiantes({
   onSesionCaducada,
 }: {
   onSesionCaducada: () => void;
 }) {
   const [abierto, setAbierto] = useState(false);
+  const [cantidad, setCantidad] = useState("30");
   const [ci, setCi] = useState("");
-  const [generando, setGenerando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [resultado, setResultado] = useState<{
-    codigo: string;
-    expiraEn: string;
-  } | null>(null);
+  const [generandoLote, setGenerandoLote] = useState(false);
+  const [generandoIndividual, setGenerandoIndividual] = useState(false);
+  const [errorLote, setErrorLote] = useState<string | null>(null);
+  const [errorIndividual, setErrorIndividual] = useState<string | null>(null);
+  const [resultadoLote, setResultadoLote] = useState<CodigoGenerado | null>(
+    null,
+  );
+  const [resultadoIndividual, setResultadoIndividual] =
+    useState<CodigoGenerado | null>(null);
 
-  async function generar(event: FormEvent) {
+  /** Devuelve `null` si la sesión caducó (el padre ya recibió el aviso). */
+  async function pedirCodigo(
+    url: string,
+    cuerpo: unknown,
+  ): Promise<CodigoGenerado | null> {
+    const respuesta = await fetch(url, {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(cuerpo),
+    });
+
+    if (respuesta.status === 401) {
+      onSesionCaducada();
+      return null;
+    }
+
+    const datos = await leerRespuesta(respuesta);
+    if (!datos.ok) throw new Error(datos.mensaje);
+
+    return {
+      codigo: String(datos.codigo ?? ""),
+      expiraEn: String(datos.expiraEn ?? ""),
+      maxCedulas:
+        typeof datos.maxCedulas === "number" ? datos.maxCedulas : undefined,
+    };
+  }
+
+  async function generarLote(event: FormEvent) {
     event.preventDefault();
-    if (generando) return;
+    if (generandoLote) return;
 
-    setGenerando(true);
-    setError(null);
-    setResultado(null);
+    setGenerandoLote(true);
+    setErrorLote(null);
+    setResultadoLote(null);
 
     try {
-      const respuesta = await fetch("/api/admin/estudiantes/enrolamiento", {
-        method: "POST",
-        headers: JSON_HEADERS,
-        body: JSON.stringify({ ci }),
-      });
+      const datos = await pedirCodigo(
+        "/api/admin/estudiantes/enrolamiento/lote",
+        { cantidad: Number(cantidad) },
+      );
 
-      if (respuesta.status === 401) {
-        onSesionCaducada();
-        return;
-      }
-
-      const datos = await leerRespuesta(respuesta);
-      if (!datos.ok) throw new Error(datos.mensaje);
-
-      setResultado({
-        codigo: String(datos.codigo ?? ""),
-        expiraEn: String(datos.expiraEn ?? ""),
-      });
+      if (datos) setResultadoLote(datos);
     } catch (fallo) {
-      setError(
+      setErrorLote(
         fallo instanceof Error && fallo.message
           ? fallo.message
-          : "No pudimos generar el código de enrolamiento.",
+          : "No pudimos generar el código de lote.",
       );
     } finally {
-      setGenerando(false);
+      setGenerandoLote(false);
     }
   }
+
+  async function generarIndividual(event: FormEvent) {
+    event.preventDefault();
+    if (generandoIndividual) return;
+
+    setGenerandoIndividual(true);
+    setErrorIndividual(null);
+    setResultadoIndividual(null);
+
+    try {
+      const datos = await pedirCodigo(
+        "/api/admin/estudiantes/enrolamiento",
+        { ci },
+      );
+
+      if (datos) setResultadoIndividual(datos);
+    } catch (fallo) {
+      setErrorIndividual(
+        fallo instanceof Error && fallo.message
+          ? fallo.message
+          : "No pudimos generar el código de reinicio.",
+      );
+    } finally {
+      setGenerandoIndividual(false);
+    }
+  }
+
+  const claseError =
+    "mt-3 rounded-lg border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-300";
 
   return (
     <section className="mt-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm">
@@ -800,67 +883,136 @@ function PanelEnrolamientoEstudiantes({
       </button>
 
       {abierto && (
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 space-y-5">
           <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
-            Genera un código de un solo uso para que un estudiante vincule su app
-            de autenticación. También sirve para reiniciarla si cambió de teléfono
-            o lo perdió: la app anterior de esa cédula queda invalidada.
+            Los códigos vencen a las {CONFIG.duracionCodigoEnrolamientoHoras}{" "}
+            horas y se muestran una sola vez. Compártelos por un canal seguro.
           </p>
 
-          <form onSubmit={generar} className="flex flex-wrap items-end gap-3">
-            <div className="min-w-0 flex-1">
-              <label
-                htmlFor="enrolamiento-ci"
-                className="block text-xs font-medium text-slate-600 dark:text-slate-400"
-              >
-                Cédula del estudiante
-              </label>
-              <input
-                id="enrolamiento-ci"
-                type="text"
-                inputMode="numeric"
-                maxLength={8}
-                required
-                value={ci}
-                onChange={(event) =>
-                  setCi(event.target.value.replace(/\D/g, "").slice(0, 8))
-                }
-                placeholder="Ej. 12345678"
-                className={`${campo} mt-1 w-full`}
-              />
-            </div>
-            <button type="submit" disabled={generando} className={botonPrimario}>
-              {generando ? "Generando..." : "Generar código"}
-            </button>
-          </form>
-
-          {error && (
-            <p
-              role="alert"
-              className="rounded-lg border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-300"
-            >
-              {error}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
+            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+              Código para varios estudiantes
             </p>
-          )}
+            <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+              Un solo código para que hasta la cantidad indicada de cédulas se
+              enrolen. No sirve para cédulas que ya tengan app: esas necesitan
+              el reinicio de abajo.
+            </p>
 
-          {resultado && (
-            <div
-              role="status"
-              className="rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-3"
+            <form
+              onSubmit={generarLote}
+              className="mt-3 flex flex-wrap items-end gap-3"
             >
-              <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
-                Código para la cédula {ci}
+              <div className="min-w-0 flex-1">
+                <label
+                  htmlFor="enrolamiento-cantidad"
+                  className="block text-xs font-medium text-slate-600 dark:text-slate-400"
+                >
+                  Cantidad de cédulas
+                </label>
+                <input
+                  id="enrolamiento-cantidad"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={CONFIG.maxCedulasPorCodigoEnrolamiento}
+                  step={1}
+                  required
+                  value={cantidad}
+                  onChange={(event) =>
+                    setCantidad(event.target.value.replace(/\D/g, ""))
+                  }
+                  className={`${campo} mt-1 w-full`}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={generandoLote}
+                className={botonPrimario}
+              >
+                {generandoLote ? "Generando..." : "Generar código"}
+              </button>
+            </form>
+
+            {errorLote && (
+              <p role="alert" className={claseError}>
+                {errorLote}
               </p>
-              <p className="mt-1 select-all break-all font-mono text-lg font-bold tracking-[0.2em] text-emerald-900 dark:text-emerald-200">
-                {resultado.codigo}
+            )}
+
+            {resultadoLote && (
+              <div className="mt-3">
+                <TarjetaCodigo
+                  titulo={`Código para hasta ${
+                    resultadoLote.maxCedulas ?? cantidad
+                  } cédulas`}
+                  codigo={resultadoLote.codigo}
+                  expiraEn={resultadoLote.expiraEn}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
+            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+              Reiniciar una cédula
+            </p>
+            <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+              Invalida la app actual de esa cédula. Úsalo si cambió de teléfono
+              o lo perdió. No se pueden reiniciar varias cédulas con este
+              formulario.
+            </p>
+
+            <form
+              onSubmit={generarIndividual}
+              className="mt-3 flex flex-wrap items-end gap-3"
+            >
+              <div className="min-w-0 flex-1">
+                <label
+                  htmlFor="enrolamiento-ci"
+                  className="block text-xs font-medium text-slate-600 dark:text-slate-400"
+                >
+                  Cédula del estudiante
+                </label>
+                <input
+                  id="enrolamiento-ci"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={8}
+                  required
+                  value={ci}
+                  onChange={(event) =>
+                    setCi(event.target.value.replace(/\D/g, "").slice(0, 8))
+                  }
+                  placeholder="Ej. 12345678"
+                  className={`${campo} mt-1 w-full`}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={generandoIndividual}
+                className={botonPrimario}
+              >
+                {generandoIndividual ? "Generando..." : "Generar reinicio"}
+              </button>
+            </form>
+
+            {errorIndividual && (
+              <p role="alert" className={claseError}>
+                {errorIndividual}
               </p>
-              <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
-                Vence el{" "}
-                {formatoFecha.format(new Date(resultado.expiraEn))}. Compártelo
-                por un canal seguro; no se volverá a mostrar.
-              </p>
-            </div>
-          )}
+            )}
+
+            {resultadoIndividual && (
+              <div className="mt-3">
+                <TarjetaCodigo
+                  titulo={`Código de reinicio para la cédula ${ci}`}
+                  codigo={resultadoIndividual.codigo}
+                  expiraEn={resultadoIndividual.expiraEn}
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
     </section>
